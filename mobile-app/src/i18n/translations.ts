@@ -1,4 +1,4 @@
-import { Language } from '../../../shared/types';
+import { Language } from '../shared/types';
 
 export const translations = {
   [Language.ENGLISH]: {

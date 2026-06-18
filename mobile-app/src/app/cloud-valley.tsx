@@ -18,7 +18,7 @@ import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
 import { getTranslation } from '@/i18n/translations';
-import { Language } from '../../../shared/types';
+import { Language } from '../shared/types';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Accelerometer } from 'expo-sensors';
