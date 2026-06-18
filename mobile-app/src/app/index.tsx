@@ -140,16 +140,11 @@ export default function IndexScreen() {
           >
             {/* Header / Logo Section */}
             <View style={styles.headerContainer}>
-              <View style={styles.logoRow}>
-                {/* Green Leaf Decoration */}
-                <Text style={styles.leafIcon}>🍃</Text>
-                <Text style={styles.logoNawat}>Nawat</Text>
-                <Text style={styles.sparkleDecoration}>✨</Text>
-              </View>
-              <View style={styles.logoRow}>
-                <Text style={styles.logoFocus}>Focus</Text>
-                <Text style={styles.starIcon}>⭐</Text>
-              </View>
+              <Image
+                source={require('../../assets/nawat_logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
               <Text style={styles.subtitle}>Help Nawat on today's journey</Text>
             </View>
 
@@ -167,28 +162,7 @@ export default function IndexScreen() {
                   style={styles.characterImage}
                   resizeMode="contain"
                 />
-              </Animated.View>
-
-              {/* Floating Signposts on the Right */}
-              <View style={styles.signpostContainer}>
-                <View style={styles.signpostPole} />
-                
-                {/* Book Signpost */}
-                <TouchableOpacity style={[styles.signpostItem, styles.signpostCyan]} activeOpacity={0.8}>
-                  <Text style={styles.signpostEmoji}>📖</Text>
-                </TouchableOpacity>
-
-                {/* Puzzle Signpost */}
-                <TouchableOpacity style={[styles.signpostItem, styles.signpostPurple]} activeOpacity={0.8}>
-                  <Text style={styles.signpostEmoji}>🧩</Text>
-                </TouchableOpacity>
-
-                {/* Plant Signpost */}
-                <TouchableOpacity style={[styles.signpostItem, styles.signpostGreen]} activeOpacity={0.8}>
-                  <Text style={styles.signpostEmoji}>🌿</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              </Animated.View>            </View>
 
             {/* Middle Badge: Play, focus, and grow your garden */}
             <View style={styles.infoBadge}>
@@ -219,15 +193,6 @@ export default function IndexScreen() {
                   <ArrowRightIcon />
                 </View>
               </TouchableOpacity>
-
-              {/* Choose Language Selector Header */}
-              <View style={styles.chooseLanguageBtn}>
-                <View style={styles.globeIconContainer}>
-                  <PurpleGlobeIcon />
-                </View>
-                <Text style={styles.chooseLanguageText}>Choose Language</Text>
-                <Text style={styles.chevronIcon}>❯</Text>
-              </View>
 
               {/* Horizontal Languages row */}
               <View style={styles.languagesRow}>
@@ -314,42 +279,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 15,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  leafIcon: {
-    fontSize: 24,
-    marginRight: 6,
-    transform: [{ rotate: '-15deg' }],
-  },
-  sparkleDecoration: {
-    fontSize: 18,
-    color: '#FFB300',
-    marginLeft: 6,
-    marginTop: -10,
-  },
-  logoNawat: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#1A365D', // Deep blue
-    fontFamily: 'System',
-    letterSpacing: -0.5,
-  },
-  logoFocus: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#009688', // Green/Teal
-    fontFamily: 'System',
-    letterSpacing: -0.5,
-    marginTop: -8,
-  },
-  starIcon: {
-    fontSize: 26,
-    color: '#9C27B0', // Purple star
-    marginLeft: 8,
-    marginTop: -12,
+  logoImage: {
+    width: 370,
+    height: 155,
+    marginTop: 10,
   },
   subtitle: {
     fontSize: 18,
