@@ -10,6 +10,7 @@ import {
   ImageBackground,
   ScrollView,
   Animated,
+  PixelRatio,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,11 +24,21 @@ import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Accelerometer } from 'expo-sensors';
 
+// ===== RESPONSIVE HELPERS =====
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BASE_WIDTH = 375; // référence (iPhone SE)
+const scale = SCREEN_WIDTH / BASE_WIDTH;
+const fontScale = PixelRatio.getFontScale() * scale;
+
+// Fonctions de mise à l'échelle
+const s = (size: number) => Math.round(size * scale);
+const f = (size: number) => Math.round(size * fontScale);
+
+// Détection tablette
 const isTablet = SCREEN_WIDTH > 600;
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
-// Game Screens
+// ===== TYPES =====
 type GameScreen = 'PERMISSION' | 'GET_READY' | 'GAMEPLAY' | 'RESULTS';
 
 interface CalmMoveStep {
@@ -37,7 +48,6 @@ interface CalmMoveStep {
   durationMs: number;
 }
 
-// Level configs
 interface LevelConfig {
   nameKey: string;
   descriptionKey: string;
@@ -106,16 +116,16 @@ export default function CloudValleyScreen() {
   const router = useRouter();
   const { startSession, endSession, clearSession, rewards } = useGameStore();
   const { child } = useChildStore();
-  
-  // Resolve correct Language enum to avoid raw key outputs
+
+  // Resolve correct Language enum
   const lang = getLanguageEnum(child?.language);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [screen, setScreen] = useState<GameScreen>('PERMISSION');
   const [useCamera, setUseCamera] = useState(true);
-  
+
   // Level State
-  const [selectedLevel, setSelectedLevel] = useState<number>(2); // Default to Calm Master
+  const [selectedLevel, setSelectedLevel] = useState<number>(2);
   const activeLevelConfig = LEVELS[selectedLevel];
   const stepsList = activeLevelConfig.steps;
 
@@ -134,6 +144,7 @@ export default function CloudValleyScreen() {
   const [smoothMovesScore, setSmoothMovesScore] = useState(100);
   const [goodFocusScore, setGoodFocusScore] = useState(100);
   const [calmMomentsScore, setCalmMomentsScore] = useState(100);
+  const [activeParticipationScore, setActiveParticipationScore] = useState(100);
   const [finalCalmScore, setFinalCalmScore] = useState(0);
   const [sessionStartTime, setSessionStartTime] = useState(0);
 
@@ -150,6 +161,22 @@ export default function CloudValleyScreen() {
   const isSensorAvailableRef = useRef(true);
   const totalStepsRef = useRef(4);
 
+  // ADHD tick tracking refs
+  const totalGameplayTicksRef = useRef(0);
+  const calmGameplayTicksRef = useRef(0);
+  const suddenMovementTicksRef = useRef(0);
+  const holdPhaseTicksRef = useRef(0);
+  const holdPhaseCalmTicksRef = useRef(0);
+  const breathingPhaseRef = useRef<'INHALE' | 'HOLD' | 'EXHALE'>('INHALE');
+
+  // Phase-aware and active participation refs
+  const isCameraActiveRef = useRef(false);
+  const hasMovedInCurrentStepRef = useRef(false);
+  const stepsMovedCountRef = useRef(0);
+  const holdTicksRef = useRef(0);
+  const holdCalmTicksRef = useRef(0);
+  const calmProgressRef = useRef(0);
+
   // Sync refs with local states
   useEffect(() => { motionVarianceRef.current = motionVariance; }, [motionVariance]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -157,6 +184,8 @@ export default function CloudValleyScreen() {
   useEffect(() => { currentStepIndexRef.current = currentStepIndex; }, [currentStepIndex]);
   useEffect(() => { isSensorAvailableRef.current = isSensorAvailable; }, [isSensorAvailable]);
   useEffect(() => { totalStepsRef.current = stepsList.length; }, [stepsList]);
+  useEffect(() => { breathingPhaseRef.current = breathingPhase; }, [breathingPhase]);
+  useEffect(() => { calmProgressRef.current = calmProgress; }, [calmProgress]);
 
   // HTML5 Web Video Ref
   const videoRef = useRef<any>(null);
@@ -198,13 +227,12 @@ export default function CloudValleyScreen() {
     };
   }, []);
 
-  // Web camera hook - creates video element via DOM API to avoid RN web JSX issues
+  // Web camera hook
   useEffect(() => {
     if (Platform.OS === 'web' && useCamera && screen === 'GAMEPLAY' && !isPaused && isPlaying) {
       const container = videoRef.current;
       if (!container) return;
 
-      // Create a native video element via DOM
       let videoEl = container.querySelector('video');
       if (!videoEl) {
         videoEl = document.createElement('video');
@@ -217,11 +245,45 @@ export default function CloudValleyScreen() {
         container.appendChild(videoEl);
       }
 
+      let frameCheckInterval: NodeJS.Timeout;
+
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
         .then(stream => {
           if (videoEl) {
             videoEl.srcObject = stream;
             videoEl.play().catch(() => {});
+
+            // Setup camera motion detection
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 48;
+            const ctx = canvas.getContext('2d');
+            let lastFrame: Uint8ClampedArray | null = null;
+
+            const checkFrame = () => {
+              if (!videoEl || videoEl.paused || videoEl.ended || !ctx) return;
+              try {
+                ctx.drawImage(videoEl, 0, 0, 64, 48);
+                const frame = ctx.getImageData(0, 0, 64, 48).data;
+                isCameraActiveRef.current = true;
+                if (lastFrame) {
+                  let diff = 0;
+                  // Sample every 16th value (red channel of sampled pixels) to be super fast
+                  for (let i = 0; i < frame.length; i += 16) {
+                    diff += Math.abs(frame[i] - lastFrame[i]);
+                  }
+                  const avgDiff = diff / (frame.length / 16);
+                  // Normalize avgDiff (0-255) to a motion variance value (e.g. 0.0 to 1.5)
+                  const normalizedVariance = avgDiff / 15; // lower divisor = more sensitive to motion
+                  setMotionVariance(normalizedVariance);
+                }
+                lastFrame = frame;
+              } catch (e) {
+                // Ignore cross-origin / draw errors
+              }
+            };
+
+            frameCheckInterval = setInterval(checkFrame, 150);
           }
         })
         .catch(err => {
@@ -229,7 +291,9 @@ export default function CloudValleyScreen() {
         });
 
       return () => {
-        // Stop all tracks when leaving gameplay
+        if (frameCheckInterval) {
+          clearInterval(frameCheckInterval);
+        }
         if (videoEl && videoEl.srcObject) {
           const tracks = (videoEl.srcObject as MediaStream).getTracks();
           tracks.forEach(track => track.stop());
@@ -243,7 +307,7 @@ export default function CloudValleyScreen() {
     if (!isPlaying || isPaused) return;
 
     let timer: NodeJS.Timeout;
-    
+
     const runBreathingCycle = () => {
       const inhaleT = activeLevelConfig.inhaleDuration;
       const holdT = activeLevelConfig.holdDuration;
@@ -300,47 +364,93 @@ export default function CloudValleyScreen() {
     ).start();
   }, []);
 
-  // Stable gameplay logic timer (resolves the timer resets from accelerometer values)
+  // Stable gameplay logic timer
   useEffect(() => {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
       if (isPausedRef.current) return;
 
-      const currentVariance = isSensorAvailableRef.current ? motionVarianceRef.current : Math.random() * 0.05;
-      const isCalm = currentVariance < 0.12;
+      totalGameplayTicksRef.current += 1;
 
-      // Adjust metrics
-      if (!isCalm) {
+      const isInputActive = isSensorAvailableRef.current || (useCamera && isCameraActiveRef.current);
+      const currentVariance = isInputActive
+        ? motionVarianceRef.current
+        : (Math.random() < 0.08 ? Math.random() * 0.35 : Math.random() * 0.05);
+
+      const isCalm = currentVariance < 0.15;
+      const progress = calmProgressRef.current;
+      const isActionPhase = progress < 30;
+
+      if (isActionPhase) {
+        // 1. Action Phase: check if child initiates movement (variance > 0.15)
+        if (currentVariance > 0.15) {
+          hasMovedInCurrentStepRef.current = true;
+        }
+      } else {
+        // 2. Hold Phase: track postural stability
+        holdTicksRef.current += 1;
+        if (isCalm) {
+          holdCalmTicksRef.current += 1;
+        }
+
+        // Track sudden hyperactive movements (only in Hold Phase)
+        if (currentVariance > 0.50) {
+          suddenMovementTicksRef.current += 1;
+        }
+
+        // Track breathing sync (only in Hold Phase)
+        if (breathingPhaseRef.current === 'HOLD' || breathingPhaseRef.current === 'EXHALE') {
+          holdPhaseTicksRef.current += 1;
+          if (isCalm) {
+            holdPhaseCalmTicksRef.current += 1;
+          }
+        }
+      }
+
+      // Legacy calm ticks track
+      if (isCalm) {
+        calmGameplayTicksRef.current += 1;
+      }
+
+      // Screen shake and haptics ONLY during Hold Phase when not calm
+      if (!isActionPhase && !isCalm) {
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-        setSmoothMovesScore((prev) => Math.max(40, prev - 2));
-        setGoodFocusScore((prev) => Math.max(50, prev - 1));
-        
+
         Animated.sequence([
           Animated.timing(shakeAnim, { toValue: 4, duration: 40, useNativeDriver: USE_NATIVE_DRIVER }),
           Animated.timing(shakeAnim, { toValue: -4, duration: 40, useNativeDriver: USE_NATIVE_DRIVER }),
           Animated.timing(shakeAnim, { toValue: 0, duration: 40, useNativeDriver: USE_NATIVE_DRIVER }),
         ]).start();
-      } else {
-        setCalmMomentsScore((prev) => Math.min(100, prev + 1));
       }
 
-      // Progress bar fill
       setCalmProgress((prev) => {
-        const increment = isCalm ? 3 : 1;
+        // In action phase, progress increments steadily (+3) to transition to hold phase.
+        // In hold phase, progress increments +3 if calm, and +1 if not calm.
+        const increment = isActionPhase ? 3 : (isCalm ? 3 : 1);
         const nextProgress = prev + increment;
-        
+
         if (nextProgress >= 100) {
           if (Platform.OS !== 'web') {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
-          
-          if (currentStepIndexRef.current < totalStepsRef.current - 1) {
+
+          const currentTotalSteps = totalStepsRef.current;
+          if (currentStepIndexRef.current < currentTotalSteps - 1) {
+            // Check movement for completed step
+            if (hasMovedInCurrentStepRef.current) {
+              stepsMovedCountRef.current += 1;
+            }
+            hasMovedInCurrentStepRef.current = false;
             setCurrentStepIndex((idx) => idx + 1);
             return 0;
           } else {
+            // Check movement for final step
+            if (hasMovedInCurrentStepRef.current) {
+              stepsMovedCountRef.current += 1;
+            }
             endGame();
             return 100;
           }
@@ -357,14 +467,37 @@ export default function CloudValleyScreen() {
     setScreen('RESULTS');
 
     const duration = Date.now() - sessionStartTime;
-    const finalScore = Math.round(
-      (smoothMovesScore * 0.4) + (goodFocusScore * 0.3) + (calmMomentsScore * 0.3)
+
+    const totalSteps = stepsList.length;
+    const isInputActive = isSensorAvailableRef.current || (useCamera && isCameraActiveRef.current);
+    const calculatedParticipation = isInputActive ? Math.round((stepsMovedCountRef.current / totalSteps) * 100) : 100;
+
+    // Postural Control (Smooth Moves): holdCalmTicks / holdTicks during HOLD phase
+    const totalHoldTicks = Math.max(1, holdTicksRef.current);
+    const calculatedSmoothMoves = Math.round((holdCalmTicksRef.current / totalHoldTicks) * 100);
+
+    // Inhibitory Control (Good Focus): deduct 10 points per sudden movement (variance > 0.5)
+    const calculatedGoodFocus = Math.max(40, 100 - (suddenMovementTicksRef.current * 10));
+
+    // Breathing Sync: calm percentage during HOLD/EXHALE phases within Hold phase
+    const totalHoldBreathingTicks = Math.max(1, holdPhaseTicksRef.current);
+    const calculatedCalmMoments = Math.round(
+      (holdPhaseCalmTicksRef.current / totalHoldBreathingTicks) * 100
     );
+
+    // Final score: average of clinical metrics scaled by active participation rate
+    const rawScore = (calculatedSmoothMoves * 0.4) + (calculatedGoodFocus * 0.3) + (calculatedCalmMoments * 0.3);
+    const finalScore = Math.round((rawScore * calculatedParticipation) / 100);
+
+    setSmoothMovesScore(calculatedSmoothMoves);
+    setGoodFocusScore(calculatedGoodFocus);
+    setCalmMomentsScore(calculatedCalmMoments);
+    setActiveParticipationScore(calculatedParticipation);
     setFinalCalmScore(finalScore);
 
     endSession({
-      accuracy: goodFocusScore,
-      smoothness: smoothMovesScore,
+      accuracy: calculatedGoodFocus,
+      smoothness: calculatedSmoothMoves,
       completionTime: duration,
       calmScore: finalScore,
     });
@@ -386,8 +519,8 @@ export default function CloudValleyScreen() {
           session_id: sessionId,
           child_id: child.id,
           game_type: 'CLOUD_VALLEY',
-          accuracy: goodFocusScore,
-          smoothness: smoothMovesScore,
+          accuracy: calculatedGoodFocus,
+          smoothness: calculatedSmoothMoves,
           completion_time: duration,
           path_deviation: 0,
           calm_score: finalScore,
@@ -422,11 +555,23 @@ export default function CloudValleyScreen() {
     setSmoothMovesScore(100);
     setGoodFocusScore(100);
     setCalmMomentsScore(100);
+    setActiveParticipationScore(100);
     setFinalCalmScore(0);
     setIsPlaying(false);
     setIsPaused(false);
     setBreathingPhase('INHALE');
     setScreen('PERMISSION');
+
+    // Reset refs
+    totalGameplayTicksRef.current = 0;
+    calmGameplayTicksRef.current = 0;
+    suddenMovementTicksRef.current = 0;
+    holdPhaseTicksRef.current = 0;
+    holdPhaseCalmTicksRef.current = 0;
+    hasMovedInCurrentStepRef.current = false;
+    stepsMovedCountRef.current = 0;
+    holdTicksRef.current = 0;
+    holdCalmTicksRef.current = 0;
   };
 
   const handleStartGame = () => {
@@ -435,15 +580,27 @@ export default function CloudValleyScreen() {
     setSmoothMovesScore(100);
     setGoodFocusScore(100);
     setCalmMomentsScore(100);
+    setActiveParticipationScore(100);
     setBreathingPhase('INHALE');
     setSessionStartTime(Date.now());
     startSession('CLOUD_VALLEY');
     setIsPlaying(true);
     setIsPaused(false);
     setScreen('GAMEPLAY');
+
+    // Reset refs
+    totalGameplayTicksRef.current = 0;
+    calmGameplayTicksRef.current = 0;
+    suddenMovementTicksRef.current = 0;
+    holdPhaseTicksRef.current = 0;
+    holdPhaseCalmTicksRef.current = 0;
+    hasMovedInCurrentStepRef.current = false;
+    stepsMovedCountRef.current = 0;
+    holdTicksRef.current = 0;
+    holdCalmTicksRef.current = 0;
   };
 
-  // Helper translations lookup
+  // Translation helper
   const t = (key: string, variables?: Record<string, string | number>) => {
     let value = getTranslation(lang, key);
     if (variables) {
@@ -454,12 +611,13 @@ export default function CloudValleyScreen() {
     return value;
   };
 
-  // SVGs steps icons mapping
+  // SVG icons
   const renderStepIcon = (type: string, color = '#00B4D8') => {
+    const iconSize = s(40);
     switch (type) {
       case 'hand':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <Path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5" />
             <Path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6" />
             <Path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v9" />
@@ -468,7 +626,7 @@ export default function CloudValleyScreen() {
         );
       case 'both_hands':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <G transform="translate(-2, 0)">
               <Path d="M9 11V6a1.5 1.5 0 0 0-1.5-1.5v0A1.5 1.5 0 0 0 6 6v5" />
               <Path d="M6 10V4a1.5 1.5 0 0 0-1.5-1.5v0A1.5 1.5 0 0 0 3 4v6" />
@@ -483,7 +641,7 @@ export default function CloudValleyScreen() {
         );
       case 'shoulders':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
             <Circle cx="12" cy="7" r="4" />
             <Path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
             <Path d="M4 11l2 2-2 2" strokeLinecap="round" strokeLinejoin="round" />
@@ -492,7 +650,7 @@ export default function CloudValleyScreen() {
         );
       case 'head':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
             <Circle cx="12" cy="8" r="4" />
             <Path d="M6 20v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1" />
             <Path d="M8 5a2 2 0 0 1 8 0" strokeLinecap="round" />
@@ -500,14 +658,14 @@ export default function CloudValleyScreen() {
         );
       case 'balance':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
             <Path d="M12 3v18M5 12h14" strokeLinecap="round" />
             <Circle cx="12" cy="12" r="3" fill={color} />
           </Svg>
         );
       case 'breath':
         return (
-          <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
             <Circle cx="12" cy="12" r="9" />
             <Path d="M12 7v10M7 12h10" strokeLinecap="round" />
           </Svg>
@@ -517,234 +675,214 @@ export default function CloudValleyScreen() {
     }
   };
 
-  // SCREEN 1: PRIVACY & CAMERA CONFIG (Image 1 layout)
-  const renderPermissionScreen = () => {
-    return (
-      <View style={styles.cardContainer}>
-        {/* Ivory Shield Card */}
-        <View style={styles.shieldCard}>
-          {/* Overlapping Shield Icon */}
-          <View style={styles.shieldBadge}>
-            <Svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-              <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#02B3C9" />
-              <Rect x="9" y="10" width="6" height="5" rx="1" fill="#FFF" />
-              <Path d="M10 10V8a2 2 0 0 1 4 0v2" stroke="#FFF" strokeWidth="1.5" />
-            </Svg>
-          </View>
-
-          <Text style={styles.shieldHeading}>{t('cloudValley.cameraMoves')}</Text>
-          <View style={styles.divider} />
-
-          {/* List items */}
-          <View style={styles.pointRow}>
-            <View style={[styles.circleIconBg, { backgroundColor: '#E0F7FA' }]}>
-              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A896" strokeWidth="2.5">
-                <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                <Circle cx="12" cy="13" r="4" />
-              </Svg>
-            </View>
-            <View style={styles.pointTextContainer}>
-              <Text style={styles.pointTitle}>{t('cloudValley.cameraMoves')}</Text>
-              <Text style={styles.pointDesc}>{t('cloudValley.cameraMovesDesc')}</Text>
-            </View>
-          </View>
-
-          <View style={styles.pointRow}>
-            <View style={[styles.circleIconBg, { backgroundColor: '#FFEBEE' }]}>
-              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF5350" strokeWidth="2.5">
-                <Path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" />
-                <Circle cx="8.5" cy="8.5" r="1.5" />
-                <Path d="M21 15l-5-5L5 21" />
-                <Path d="M19.2 4.8L4.8 19.2" stroke="#EF5350" strokeWidth="2.5" />
-              </Svg>
-            </View>
-            <View style={styles.pointTextContainer}>
-              <Text style={styles.pointTitle}>{t('cloudValley.noPhotos')}</Text>
-              <Text style={styles.pointDesc}>{t('cloudValley.noPhotosDesc')}</Text>
-            </View>
-          </View>
-
-          <View style={styles.pointRow}>
-            <View style={[styles.circleIconBg, { backgroundColor: '#FFEBEE' }]}>
-              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF5350" strokeWidth="2.5">
-                <Path d="M23 7l-7 5 7 5V7z" />
-                <Rect x="1" y="5" width="15" height="14" rx="2" />
-                <Path d="M19.2 4.8L4.8 19.2" stroke="#EF5350" strokeWidth="2.5" />
-              </Svg>
-            </View>
-            <View style={styles.pointTextContainer}>
-              <Text style={styles.pointTitle}>{t('cloudValley.noVideos')}</Text>
-              <Text style={styles.pointDesc}>{t('cloudValley.noVideosDesc')}</Text>
-            </View>
-          </View>
+  // ===== SCREENS =====
+  const renderPermissionScreen = () => (
+    <View style={styles.cardContainer}>
+      <View style={styles.shieldCard}>
+        <View style={styles.shieldBadge}>
+          <Svg width={s(32)} height={s(32)} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#02B3C9" />
+            <Rect x="9" y="10" width="6" height="5" rx="1" fill="#FFF" />
+            <Path d="M10 10V8a2 2 0 0 1 4 0v2" stroke="#FFF" strokeWidth="1.5" />
+          </Svg>
         </View>
 
-        {/* Mascot Mascot Standing Next (Responsive Layout) */}
-        <Animated.View style={[styles.permissionMascotWrapper, { transform: [{ scale: pulseAnim }] }]}>
-          <Image
-            source={require('../../assets/nawat_character.png')}
-            style={styles.permissionMascot}
-            resizeMode="contain"
-          />
-        </Animated.View>
+        <Text style={styles.shieldHeading}>{t('cloudValley.cameraMoves')}</Text>
+        <View style={styles.divider} />
 
-        {/* Bottom Buttons */}
-        <View style={styles.permissionButtonsWrapper}>
-          <TouchableOpacity
-            style={styles.btnUseCamera}
-            activeOpacity={0.9}
-            onPress={async () => {
-              setUseCamera(true);
-              if (!cameraPermission?.granted) {
-                const res = await requestCameraPermission();
-                if (res.granted) {
-                  setScreen('GET_READY');
-                } else {
-                  setUseCamera(false);
-                  setScreen('GET_READY');
-                }
-              } else {
-                setScreen('GET_READY');
-              }
-            }}
-          >
-            <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" style={{ marginRight: 8 }}>
+        <View style={styles.pointRow}>
+          <View style={[styles.circleIconBg, { backgroundColor: '#E0F7FA' }]}>
+            <Svg width={s(20)} height={s(20)} viewBox="0 0 24 24" fill="none" stroke="#00A896" strokeWidth="2.5">
               <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
               <Circle cx="12" cy="13" r="4" />
             </Svg>
-            <Text style={styles.btnUseCameraText}>{t('cloudValley.useCamera')} ✨</Text>
-          </TouchableOpacity>
+          </View>
+          <View style={styles.pointTextContainer}>
+            <Text style={styles.pointTitle}>{t('cloudValley.cameraMoves')}</Text>
+            <Text style={styles.pointDesc}>{t('cloudValley.cameraMovesDesc')}</Text>
+          </View>
+        </View>
+
+        <View style={styles.pointRow}>
+          <View style={[styles.circleIconBg, { backgroundColor: '#FFEBEE' }]}>
+            <Svg width={s(20)} height={s(20)} viewBox="0 0 24 24" fill="none" stroke="#EF5350" strokeWidth="2.5">
+              <Path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" />
+              <Circle cx="8.5" cy="8.5" r="1.5" />
+              <Path d="M21 15l-5-5L5 21" />
+              <Path d="M19.2 4.8L4.8 19.2" stroke="#EF5350" strokeWidth="2.5" />
+            </Svg>
+          </View>
+          <View style={styles.pointTextContainer}>
+            <Text style={styles.pointTitle}>{t('cloudValley.noPhotos')}</Text>
+            <Text style={styles.pointDesc}>{t('cloudValley.noPhotosDesc')}</Text>
+          </View>
+        </View>
+
+        <View style={styles.pointRow}>
+          <View style={[styles.circleIconBg, { backgroundColor: '#FFEBEE' }]}>
+            <Svg width={s(20)} height={s(20)} viewBox="0 0 24 24" fill="none" stroke="#EF5350" strokeWidth="2.5">
+              <Path d="M23 7l-7 5 7 5V7z" />
+              <Rect x="1" y="5" width="15" height="14" rx="2" />
+              <Path d="M19.2 4.8L4.8 19.2" stroke="#EF5350" strokeWidth="2.5" />
+            </Svg>
+          </View>
+          <View style={styles.pointTextContainer}>
+            <Text style={styles.pointTitle}>{t('cloudValley.noVideos')}</Text>
+            <Text style={styles.pointDesc}>{t('cloudValley.noVideosDesc')}</Text>
+          </View>
         </View>
       </View>
-    );
-  };
 
-  // SCREEN 2: GET READY (Image 2 layout with Levels system)
-  const renderGetReadyScreen = () => {
-    return (
-      <View style={styles.readyContainer}>
-        {/* Rules horizontal row */}
-        <View style={styles.cardsRowWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.cardsScrollContent}
-          >
-            {/* Safe space */}
-            <View style={styles.ruleCard}>
-              <View style={[styles.cardBadge, { backgroundColor: '#4CAF50' }]}>
-                <Text style={{ color: '#FFF', fontSize: 13 }}>🌿</Text>
-              </View>
-              <View style={styles.ruleIconRoundBg}>
-                <Svg width="54" height="54" viewBox="0 0 24 24" fill="none">
-                  <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93.03-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 1.76-.56 3.39-1.5 4.73z" fill="#A5D6A7" />
-                  <Path d="M6 14c0-2.5 3-4 6-4s6 1.5 6 4-2.5 3-6 3-6-1.5-6-3zm3 0c0 .8 1.3 1.5 3 1.5s3-.7 3-1.5-1.3-.8-3-.8-3 .3-3 .8z" fill="#4CAF50" />
-                </Svg>
-              </View>
-              <Text style={styles.ruleCardLabel}>{t('cloudValley.safeSpace')}</Text>
-            </View>
+      <Animated.View style={[styles.permissionMascotWrapper, { transform: [{ scale: pulseAnim }] }]}>
+        <Image
+          source={require('../../assets/nawat_character.png')}
+          style={styles.permissionMascot}
+          resizeMode="contain"
+        />
+      </Animated.View>
 
-            {/* Show hand */}
-            <View style={styles.ruleCard}>
-              <View style={[styles.cardBadge, { backgroundColor: '#FFC107' }]}>
-                <Text style={{ color: '#FFF', fontSize: 13 }}>🖐️</Text>
-              </View>
-              <View style={styles.ruleIconRoundBg}>
-                <Svg width="54" height="54" viewBox="0 0 24 24" fill="none">
-                  <Circle cx="12" cy="12" r="10" fill="#FFE082" />
-                  <Path d="M12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" fill="#FFB300" />
-                  <Path d="M12 5l1.5 4.5L18 11l-4.5 1.5L12 17l-1.5-4.5L6 11l4.5-1.5z" fill="#FFF" />
-                </Svg>
-              </View>
-              <Text style={styles.ruleCardLabel}>{t('cloudValley.showYourHand')}</Text>
-            </View>
-
-            {/* Move slowly */}
-            <View style={styles.ruleCard}>
-              <View style={[styles.cardBadge, { backgroundColor: '#0288D1' }]}>
-                <Text style={{ color: '#FFF', fontSize: 13 }}>🐌</Text>
-              </View>
-              <View style={styles.ruleIconRoundBg}>
-                <Svg width="54" height="54" viewBox="0 0 24 24" fill="none">
-                  <Circle cx="12" cy="12" r="10" fill="#90CAF9" />
-                  <Path d="M15 14h-6a3 3 0 0 0-3 3h12a3 3 0 0 0-3-3z" fill="#1565C0" />
-                  <Path d="M8 14a3 3 0 1 1 6 0" fill="#1E88E5" />
-                  <Path d="M13.5 11.5a1.5 1.5 0 1 1 3 0" fill="#90CAF9" />
-                </Svg>
-              </View>
-              <Text style={styles.ruleCardLabel}>{t('cloudValley.moveSlowly')}</Text>
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Level Choice selector (ADHD Levels progression) */}
-        <View style={styles.levelSelectorContainer}>
-          <Text style={styles.levelSelectorHeading}>{t('cloudValley.chooseLevel')}</Text>
-          <View style={styles.levelButtonsRow}>
-            {[1, 2, 3].map((lvl) => (
-              <TouchableOpacity
-                key={lvl}
-                style={[
-                  styles.levelPillBtn,
-                  selectedLevel === lvl && styles.levelPillBtnActive,
-                ]}
-                onPress={() => {
-                  setSelectedLevel(lvl);
-                  if (Platform.OS !== 'web') {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                }}
-              >
-                <Text style={[
-                  styles.levelPillText,
-                  selectedLevel === lvl && styles.levelPillTextActive,
-                ]}>
-                  {LEVELS[lvl].nameKey}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.levelDescriptionPill}>
-            {activeLevelConfig.descriptionKey} • {t('cloudValley.targetCalm')}: {activeLevelConfig.targetScore}%
-          </Text>
-        </View>
-
-        {/* Mascot and Wooden signpost */}
-        <View style={styles.readyFooterRow}>
-          <Image
-            source={require('../../assets/nawat_character.png')}
-            style={styles.mascotReady}
-            resizeMode="contain"
-          />
-
-          <View style={styles.woodSignpost}>
-            <View style={styles.woodSignboard}>
-              <Text style={{ fontSize: 24, marginRight: 6 }}>😴</Text>
-              <Text style={styles.woodSignText}>Calm Moves</Text>
-            </View>
-            <View style={styles.woodSignPole} />
-          </View>
-        </View>
-
-        {/* Action Button */}
+      <View style={styles.permissionButtonsWrapper}>
         <TouchableOpacity
-          style={styles.btnStartCalmMoves}
+          style={styles.btnUseCamera}
           activeOpacity={0.9}
-          onPress={handleStartGame}
+          onPress={async () => {
+            setUseCamera(true);
+            if (!cameraPermission?.granted) {
+              const res = await requestCameraPermission();
+              if (res.granted) {
+                setScreen('GET_READY');
+              } else {
+                setUseCamera(false);
+                setScreen('GET_READY');
+              }
+            } else {
+              setScreen('GET_READY');
+            }
+          }}
         >
-          <Text style={styles.btnStartCalmMovesText}>{t('cloudValley.startCalmMoves')} ➔</Text>
+          <Svg width={s(20)} height={s(20)} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" style={{ marginRight: s(8) }}>
+            <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <Circle cx="12" cy="13" r="4" />
+          </Svg>
+          <Text style={styles.btnUseCameraText}>{t('cloudValley.useCamera')} ✨</Text>
         </TouchableOpacity>
       </View>
-    );
-  };
+    </View>
+  );
 
-  // SCREEN 3: GAMEPLAY (Image 3 layout)
+  const renderGetReadyScreen = () => (
+    <View style={styles.readyContainer}>
+      <View style={styles.cardsRowWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.cardsScrollContent}
+        >
+          <View style={styles.ruleCard}>
+            <View style={[styles.cardBadge, { backgroundColor: '#4CAF50' }]}>
+              <Text style={{ color: '#FFF', fontSize: f(13) }}>🌿</Text>
+            </View>
+            <View style={styles.ruleIconRoundBg}>
+              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93.03-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 1.76-.56 3.39-1.5 4.73z" fill="#A5D6A7" />
+                <Path d="M6 14c0-2.5 3-4 6-4s6 1.5 6 4-2.5 3-6 3-6-1.5-6-3zm3 0c0 .8 1.3 1.5 3 1.5s3-.7 3-1.5-1.3-.8-3-.8-3 .3-3 .8z" fill="#4CAF50" />
+              </Svg>
+            </View>
+            <Text style={styles.ruleCardLabel}>{t('cloudValley.safeSpace')}</Text>
+          </View>
+
+          <View style={styles.ruleCard}>
+            <View style={[styles.cardBadge, { backgroundColor: '#FFC107' }]}>
+              <Text style={{ color: '#FFF', fontSize: f(13) }}>🖐️</Text>
+            </View>
+            <View style={styles.ruleIconRoundBg}>
+              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" fill="#FFE082" />
+                <Path d="M12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" fill="#FFB300" />
+                <Path d="M12 5l1.5 4.5L18 11l-4.5 1.5L12 17l-1.5-4.5L6 11l4.5-1.5z" fill="#FFF" />
+              </Svg>
+            </View>
+            <Text style={styles.ruleCardLabel}>{t('cloudValley.showYourHand')}</Text>
+          </View>
+
+          <View style={styles.ruleCard}>
+            <View style={[styles.cardBadge, { backgroundColor: '#0288D1' }]}>
+              <Text style={{ color: '#FFF', fontSize: f(13) }}>🐌</Text>
+            </View>
+            <View style={styles.ruleIconRoundBg}>
+              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" fill="#90CAF9" />
+                <Path d="M15 14h-6a3 3 0 0 0-3 3h12a3 3 0 0 0-3-3z" fill="#1565C0" />
+                <Path d="M8 14a3 3 0 1 1 6 0" fill="#1E88E5" />
+                <Path d="M13.5 11.5a1.5 1.5 0 1 1 3 0" fill="#90CAF9" />
+              </Svg>
+            </View>
+            <Text style={styles.ruleCardLabel}>{t('cloudValley.moveSlowly')}</Text>
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={styles.levelSelectorContainer}>
+        <Text style={styles.levelSelectorHeading}>{t('cloudValley.chooseLevel')}</Text>
+        <View style={styles.levelButtonsRow}>
+          {[1, 2, 3].map((lvl) => (
+            <TouchableOpacity
+              key={lvl}
+              style={[
+                styles.levelPillBtn,
+                selectedLevel === lvl && styles.levelPillBtnActive,
+              ]}
+              onPress={() => {
+                setSelectedLevel(lvl);
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+              }}
+            >
+              <Text style={[
+                styles.levelPillText,
+                selectedLevel === lvl && styles.levelPillTextActive,
+              ]}>
+                {LEVELS[lvl].nameKey}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.levelDescriptionPill}>
+          {activeLevelConfig.descriptionKey} • {t('cloudValley.targetCalm')}: {activeLevelConfig.targetScore}%
+        </Text>
+      </View>
+
+      <View style={styles.readyFooterRow}>
+        <Image
+          source={require('../../assets/nawat_character.png')}
+          style={styles.mascotReady}
+          resizeMode="contain"
+        />
+
+        <View style={styles.woodSignpost}>
+          <View style={styles.woodSignboard}>
+            <Text style={{ fontSize: f(24), marginRight: s(6) }}>😴</Text>
+            <Text style={styles.woodSignText}>Calm Moves</Text>
+          </View>
+          <View style={styles.woodSignPole} />
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.btnStartCalmMoves}
+        activeOpacity={0.9}
+        onPress={handleStartGame}
+      >
+        <Text style={styles.btnStartCalmMovesText}>{t('cloudValley.startCalmMoves')} ➔</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderGameplayScreen = () => {
     const currentStep = stepsList[currentStepIndex];
-
     return (
       <View style={styles.playContainer}>
-        {/* Progress header */}
         <View style={styles.stepHeaderCard}>
           <Text style={styles.stepHeaderText}>
             {t('cloudValley.stepProgress', { current: currentStepIndex + 1, total: stepsList.length })}
@@ -763,7 +901,6 @@ export default function CloudValleyScreen() {
           </View>
         </View>
 
-        {/* Instruction Banner Card with Mascot peeking */}
         <View style={styles.instructionBannerCard}>
           <View style={styles.instructionIconBadge}>
             {renderStepIcon(currentStep.iconType, '#00A896')}
@@ -776,19 +913,15 @@ export default function CloudValleyScreen() {
           />
         </View>
 
-        {/* Main interactive camera viewport */}
         <Animated.View style={[
           styles.viewportWrapper,
           { transform: [{ translateX: shakeAnim }] }
         ]}>
           {useCamera ? (
             Platform.OS === 'web' ? (
-              /* HTML5 Web Camera Fallback */
               <View style={styles.webcamContainer}>
-                {/* Video element is created via DOM API in useEffect, attached to this container */}
                 <View ref={videoRef} style={styles.webcamVideoContainer} />
                 <View style={styles.viewportOverlay}>
-                  {/* Silhouette guide */}
                   <Svg style={StyleSheet.absoluteFillObject} viewBox="0 0 100 100">
                     <Path
                       d="M 50 15 C 40 15 35 25 35 35 C 35 45 42 48 50 48 C 58 48 65 45 65 35 C 65 25 60 15 50 15 Z M 50 48 C 30 48 20 62 20 85 L 80 85 C 80 62 70 48 50 48 Z"
@@ -800,15 +933,15 @@ export default function CloudValleyScreen() {
                     />
                   </Svg>
 
-                  {/* Concentric Breathing Circle */}
                   <Animated.View style={[
                     styles.breathingIndicator,
                     { transform: [{ scale: breathingAnim }] }
                   ]}>
-                    <Text style={styles.breathingText}>{t(`cloudValley.breathing${breathingPhase.charAt(0) + breathingPhase.slice(1).toLowerCase()}`)}</Text>
+                    <Text style={styles.breathingText}>
+                      {t(`cloudValley.breathing${breathingPhase.charAt(0) + breathingPhase.slice(1).toLowerCase()}`)}
+                    </Text>
                   </Animated.View>
 
-                  {/* Progress filler */}
                   <View style={styles.progressBarWrapper}>
                     <Text style={styles.progressLabel}>{t('cloudValley.holdPose')}</Text>
                     <View style={styles.progressBarOutline}>
@@ -818,7 +951,6 @@ export default function CloudValleyScreen() {
                 </View>
               </View>
             ) : (
-              /* Native Expo Camera View */
               <CameraView style={styles.cameraView} facing="front">
                 <View style={styles.viewportOverlay}>
                   <Svg style={StyleSheet.absoluteFillObject} viewBox="0 0 100 100">
@@ -838,16 +970,12 @@ export default function CloudValleyScreen() {
                   ]}>
                     <Text style={styles.breathingText}>{breathingPhase}</Text>
                   </Animated.View>
-
-                  {/* Progress loader */}
                   <View style={styles.progressBarWrapper}>
                     <Text style={styles.progressLabel}>{t('cloudValley.holdPose')}</Text>
                     <View style={styles.progressBarOutline}>
                       <View style={[styles.progressBarFill, { width: `${calmProgress}%` }]} />
                     </View>
                   </View>
-
-                  {/* Shakiness notification */}
                   {motionVariance > 0.12 && isSensorAvailable && (
                     <View style={styles.alertShakeCard}>
                       <Text style={styles.alertShakeText}>⚠️ {t('cloudValley.holdStill')}</Text>
@@ -857,9 +985,8 @@ export default function CloudValleyScreen() {
               </CameraView>
             )
           ) : (
-            /* Simulation mode (No Camera option) */
             <View style={styles.simulatedContainer}>
-              <Svg width="140" height="140" viewBox="0 0 100 100" style={{ opacity: 0.85 }}>
+              <Svg width={s(140)} height={s(140)} viewBox="0 0 100 100" style={{ opacity: 0.85 }}>
                 <Path
                   d="M 50 15 C 40 15 35 25 35 35 C 35 45 42 48 50 48 C 58 48 65 45 65 35 C 65 25 60 15 50 15 Z M 50 48 C 30 48 20 62 20 85 L 80 85 C 80 62 70 48 50 48 Z"
                   stroke="#00A896"
@@ -885,13 +1012,11 @@ export default function CloudValleyScreen() {
           )}
         </Animated.View>
 
-        {/* Bottom instructions pill */}
         <View style={styles.statusInstructionPill}>
-          <Text style={{ fontSize: 18, marginRight: 8 }}>🐌</Text>
+          <Text style={{ fontSize: f(18), marginRight: s(8) }}>🐌</Text>
           <Text style={styles.statusInstructionText}>{t('cloudValley.moveSlowly')}</Text>
         </View>
 
-        {/* Control Button */}
         <TouchableOpacity
           style={styles.btnGameplayPause}
           onPress={() => setIsPaused(!isPaused)}
@@ -901,7 +1026,6 @@ export default function CloudValleyScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Modal Pause overlay */}
         {isPaused && (
           <View style={styles.modalPauseOverlay}>
             <View style={styles.modalPauseCard}>
@@ -925,98 +1049,168 @@ export default function CloudValleyScreen() {
     );
   };
 
-  // SCREEN 4: RESULTS (Image 4 layout)
-  const renderResultsScreen = () => {
-    return (
-      <View style={styles.resultsContainer}>
-        <Text style={styles.resultsTitle}>{t('cloudValley.greatJob')}</Text>
-        <Text style={styles.resultsSubtitle}>{t('cloudValley.bridgeComplete')}</Text>
+  const getADHDFeedback = () => {
+    let posturalText = '';
+    if (smoothMovesScore > 80) {
+      posturalText = t('cloudValley.evalPosturalHigh');
+    } else if (smoothMovesScore > 50) {
+      posturalText = t('cloudValley.evalPosturalMed');
+    } else {
+      posturalText = t('cloudValley.evalPosturalLow');
+    }
 
-        <View style={styles.resultsLayoutRow}>
-          {/* Mascot Celebration (Thumbs Up) */}
-          <Image
-            source={require('../../assets/nawat_character.png')}
-            style={styles.celebrationMascot}
-            resizeMode="contain"
-          />
+    let inhibitoryText = '';
+    if (goodFocusScore > 75) {
+      inhibitoryText = t('cloudValley.evalInhibitoryHigh');
+    } else {
+      inhibitoryText = t('cloudValley.evalInhibitoryLow');
+    }
 
-          {/* Calm Score Badge Box */}
-          <View style={styles.scoreResultBadge}>
-            <Text style={styles.scoreBadgeLabel}>{t('cloudValley.calmScore')}</Text>
-            <Text style={styles.scoreBadgeNumber}>{finalCalmScore}</Text>
-            
-            <View style={styles.scoreStarsRow}>
-              <Text style={{ fontSize: 22, color: '#FFB300' }}>⭐</Text>
-              <Text style={{ fontSize: 30, color: '#FFB300', marginHorizontal: 3, marginTop: -3 }}>⭐</Text>
-              <Text style={{ fontSize: 22, color: '#FFB300' }}>⭐</Text>
-            </View>
+    let syncText = '';
+    if (calmMomentsScore > 70) {
+      syncText = t('cloudValley.evalSyncHigh');
+    } else {
+      syncText = t('cloudValley.evalSyncLow');
+    }
+
+    let participationText = '';
+    if (activeParticipationScore > 75) {
+      participationText = t('cloudValley.evalParticipationHigh');
+    } else {
+      participationText = t('cloudValley.evalParticipationLow');
+    }
+
+    return { posturalText, inhibitoryText, syncText, participationText };
+  };
+
+  const renderResultsScreen = () => (
+    <ScrollView
+      style={styles.resultsScroll}
+      contentContainerStyle={styles.resultsScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.resultsTitle}>{t('cloudValley.greatJob')}</Text>
+      <Text style={styles.resultsSubtitle}>{t('cloudValley.bridgeComplete')}</Text>
+
+      <View style={styles.resultsLayoutRow}>
+        <Image
+          source={require('../../assets/nawat_character.png')}
+          style={styles.celebrationMascot}
+          resizeMode="contain"
+        />
+
+        <View style={styles.scoreResultBadge}>
+          <Text style={styles.scoreBadgeLabel}>{t('cloudValley.calmScore')}</Text>
+          <Text style={styles.scoreBadgeNumber}>{finalCalmScore}</Text>
+
+          <View style={styles.scoreStarsRow}>
+            <Text style={{ fontSize: f(22), color: '#FFB300' }}>⭐</Text>
+            <Text style={{ fontSize: f(30), color: '#FFB300', marginHorizontal: s(3), marginTop: -s(3) }}>⭐</Text>
+            <Text style={{ fontSize: f(22), color: '#FFB300' }}>⭐</Text>
           </View>
-        </View>
-
-        {/* Badges feedback horizontal cards */}
-        <View style={styles.feedbackRow}>
-          <View style={styles.feedbackCardItem}>
-            <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#E0F7FA' }]}>
-              <Text style={{ fontSize: 22 }}>☁️</Text>
-            </View>
-            <Text style={styles.feedbackCardLabel}>{t('cloudValley.smoothMoves')}</Text>
-            <Text style={styles.feedbackCardValue}>{smoothMovesScore}%</Text>
-          </View>
-
-          <View style={styles.feedbackCardItem}>
-            <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#E8F5E9' }]}>
-              <Text style={{ fontSize: 22 }}>🌿</Text>
-            </View>
-            <Text style={styles.feedbackCardLabel}>{t('cloudValley.goodFocus')}</Text>
-            <Text style={styles.feedbackCardValue}>{goodFocusScore}%</Text>
-          </View>
-
-          <View style={styles.feedbackCardItem}>
-            <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#F3E5F5' }]}>
-              <Text style={{ fontSize: 22 }}>💜</Text>
-            </View>
-            <Text style={styles.feedbackCardLabel}>{t('cloudValley.calmMoments')}</Text>
-            <Text style={styles.feedbackCardValue}>{calmMomentsScore}%</Text>
-          </View>
-        </View>
-
-        {/* Award banner */}
-        <View style={styles.awardBannerCard}>
-          <View style={styles.awardIconBadge}>
-            <Svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <Circle cx="12" cy="12" r="5" fill="#E91E63" />
-              <Circle cx="12" cy="6" r="3.5" fill="#9C27B0" opacity="0.8" />
-              <Circle cx="12" cy="18" r="3.5" fill="#9C27B0" opacity="0.8" />
-              <Circle cx="6" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
-              <Circle cx="18" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
-            </Svg>
-          </View>
-          <Text style={styles.awardCardText}>
-            {finalCalmScore >= activeLevelConfig.targetScore ? t('cloudValley.earnedFlower') : t('cloudValley.earnedWaterDrop')}
-          </Text>
-        </View>
-
-        {/* Buttons wrapper */}
-        <View style={styles.resultsButtonsWrapper}>
-          <TouchableOpacity
-            style={styles.btnNextAdventure}
-            activeOpacity={0.9}
-            onPress={handleBack}
-          >
-            <Text style={styles.btnNextAdventureText}>{t('cloudValley.nextAdventure')} ➔</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.btnPlayAgainResult}
-            activeOpacity={0.8}
-            onPress={handlePlayAgain}
-          >
-            <Text style={styles.btnPlayAgainResultText}>{t('cloudValley.playAgain')}</Text>
-          </TouchableOpacity>
         </View>
       </View>
-    );
-  };
+
+      <View style={styles.feedbackRow}>
+        <View style={styles.feedbackCardItem}>
+          <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#E0F7FA' }]}>
+            <Text style={{ fontSize: f(22) }}>☁️</Text>
+          </View>
+          <Text style={styles.feedbackCardLabel}>{t('cloudValley.smoothMoves')}</Text>
+          <Text style={styles.feedbackCardValue}>{smoothMovesScore}%</Text>
+        </View>
+
+        <View style={styles.feedbackCardItem}>
+          <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#E8F5E9' }]}>
+            <Text style={{ fontSize: f(22) }}>🌿</Text>
+          </View>
+          <Text style={styles.feedbackCardLabel}>{t('cloudValley.goodFocus')}</Text>
+          <Text style={styles.feedbackCardValue}>{goodFocusScore}%</Text>
+        </View>
+
+        <View style={styles.feedbackCardItem}>
+          <View style={[styles.feedbackBadgeIconBg, { backgroundColor: '#F3E5F5' }]}>
+            <Text style={{ fontSize: f(22) }}>💜</Text>
+          </View>
+          <Text style={styles.feedbackCardLabel}>{t('cloudValley.calmMoments')}</Text>
+          <Text style={styles.feedbackCardValue}>{calmMomentsScore}%</Text>
+        </View>
+      </View>
+
+      <View style={styles.insightsCard}>
+        <Text style={styles.insightsTitle}>{t('cloudValley.evaluationTitle')}</Text>
+        <View style={styles.insightRow}>
+          <Text style={styles.insightEmoji}>🏃</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.insightText}>
+              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.activeParticipation')} ({activeParticipationScore}%): </Text>
+              {getADHDFeedback().participationText}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.insightRow}>
+          <Text style={styles.insightEmoji}>🧘</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.insightText}>
+              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.posturalControl')} ({smoothMovesScore}%): </Text>
+              {getADHDFeedback().posturalText}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.insightRow}>
+          <Text style={styles.insightEmoji}>🎯</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.insightText}>
+              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.inhibitoryControl')} ({goodFocusScore}%): </Text>
+              {getADHDFeedback().inhibitoryText}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.insightRow}>
+          <Text style={styles.insightEmoji}>🌬️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.insightText}>
+              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.breathingSync')} ({calmMomentsScore}%): </Text>
+              {getADHDFeedback().syncText}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.awardBannerCard}>
+        <View style={styles.awardIconBadge}>
+          <Svg width={s(28)} height={s(28)} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="12" r="5" fill="#E91E63" />
+            <Circle cx="12" cy="6" r="3.5" fill="#9C27B0" opacity="0.8" />
+            <Circle cx="12" cy="18" r="3.5" fill="#9C27B0" opacity="0.8" />
+            <Circle cx="6" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
+            <Circle cx="18" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
+          </Svg>
+        </View>
+        <Text style={styles.awardCardText}>
+          {finalCalmScore >= activeLevelConfig.targetScore ? t('cloudValley.earnedFlower') : t('cloudValley.earnedWaterDrop')}
+        </Text>
+      </View>
+
+      <View style={styles.resultsButtonsWrapper}>
+        <TouchableOpacity
+          style={styles.btnNextAdventure}
+          activeOpacity={0.9}
+          onPress={handleBack}
+        >
+          <Text style={styles.btnNextAdventureText}>{t('cloudValley.nextAdventure')} ➔</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.btnPlayAgainResult}
+          activeOpacity={0.8}
+          onPress={handlePlayAgain}
+        >
+          <Text style={styles.btnPlayAgainResultText}>{t('cloudValley.playAgain')}</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
 
   return (
     <ImageBackground
@@ -1025,20 +1219,19 @@ export default function CloudValleyScreen() {
       resizeMode="cover"
     >
       <SafeAreaView style={styles.safeAreaContainer}>
-        {/* Top Header Row */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerCircledButton}
             onPress={handleBack}
           >
-            <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={s(22)} height={s(22)} viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
               <Path d="M19 12H5M12 19l-7-7 7-7" />
             </Svg>
           </TouchableOpacity>
 
           <View style={styles.headerTitleBox}>
             <View style={styles.headerTitleIconBg}>
-              <Text style={{ fontSize: 15 }}>😴</Text>
+              <Text style={{ fontSize: f(15) }}>😴</Text>
             </View>
             <View>
               <Text style={styles.headerMainTitle}>{t('cloudValley.title')}</Text>
@@ -1050,15 +1243,15 @@ export default function CloudValleyScreen() {
 
           <View style={styles.headerRightControlsRow}>
             <TouchableOpacity
-              style={[styles.headerCircledButton, { marginRight: 8 }]}
+              style={[styles.headerCircledButton, { marginRight: s(8) }]}
               onPress={() => setIsPaused(true)}
               disabled={screen !== 'GAMEPLAY'}
             >
-              <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#5C4033' }}>❚❚</Text>
+              <Text style={{ fontSize: f(15), fontWeight: 'bold', color: '#5C4033' }}>❚❚</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.headerCircledButton}>
-              <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="2.5">
+              <Svg width={s(18)} height={s(18)} viewBox="0 0 24 24" fill="none" stroke="#5C4033" strokeWidth="2.5">
                 <Path d="M11 5L6 9H2v6h4l5 4V5z" strokeLinejoin="round" />
                 <Path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" strokeLinecap="round" />
               </Svg>
@@ -1066,7 +1259,6 @@ export default function CloudValleyScreen() {
           </View>
         </View>
 
-        {/* Page Content responsive wrapper */}
         <View style={styles.responsiveContentWrapper}>
           {screen === 'PERMISSION' && renderPermissionScreen()}
           {screen === 'GET_READY' && renderGetReadyScreen()}
@@ -1078,7 +1270,7 @@ export default function CloudValleyScreen() {
   );
 }
 
-// ==================== STYLES ====================
+// ==================== STYLES (with scaling) ====================
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
@@ -1088,21 +1280,21 @@ const styles = StyleSheet.create({
   safeAreaContainer: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingTop: Platform.OS === 'web' ? 48 : 12,
+    paddingTop: Platform.OS === 'web' ? 48 : s(12),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 10,
+    paddingHorizontal: s(16),
+    paddingTop: s(18),
+    paddingBottom: s(10),
     zIndex: 10,
   },
   headerCircledButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: s(44),
+    height: s(44),
+    borderRadius: s(22),
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
     borderColor: '#ECE0CE',
@@ -1118,9 +1310,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 24,
+    paddingVertical: s(6),
+    paddingHorizontal: s(16),
+    borderRadius: s(24),
     borderWidth: 2,
     borderColor: '#ECE0CE',
     shadowColor: '#8D6E63',
@@ -1130,21 +1322,21 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   headerTitleIconBg: {
-    marginRight: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    marginRight: s(8),
+    width: s(24),
+    height: s(24),
+    borderRadius: s(12),
     backgroundColor: '#E0F2F1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerMainTitle: {
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '900',
     color: '#00796B',
   },
   headerSubTitle: {
-    fontSize: 11,
+    fontSize: f(11),
     fontWeight: '700',
     color: '#5C4033',
   },
@@ -1157,39 +1349,39 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: isTablet ? 720 : '100%',
     alignSelf: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
   },
   cardContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: s(10),
   },
   shieldCard: {
     width: '100%',
     backgroundColor: '#FFFDF6',
-    borderRadius: 28,
+    borderRadius: s(28),
     borderWidth: 3.5,
     borderColor: '#E6D7BD',
-    paddingHorizontal: 20,
-    paddingTop: 36,
-    paddingBottom: 24,
+    paddingHorizontal: s(20),
+    paddingTop: s(36),
+    paddingBottom: s(24),
     position: 'relative',
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 5,
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   shieldBadge: {
     position: 'absolute',
-    top: -26,
+    top: -s(26),
     left: '50%',
-    marginLeft: -26,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    marginLeft: -s(26),
+    width: s(52),
+    height: s(52),
+    borderRadius: s(26),
     backgroundColor: '#FFF',
     borderWidth: 3.5,
     borderColor: '#E6D7BD',
@@ -1198,66 +1390,66 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   shieldHeading: {
-    fontSize: 20,
+    fontSize: f(20),
     fontWeight: '900',
     color: '#00796B',
     textAlign: 'center',
-    marginVertical: 8,
+    marginVertical: s(8),
   },
   divider: {
     height: 2,
     backgroundColor: '#F5EBD6',
-    marginVertical: 12,
+    marginVertical: s(12),
     width: '100%',
   },
   pointRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: s(16),
   },
   circleIconBg: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: s(42),
+    height: s(42),
+    borderRadius: s(21),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: s(12),
   },
   pointTextContainer: {
     flex: 1,
   },
   pointTitle: {
-    fontSize: 15,
+    fontSize: f(15),
     fontWeight: '800',
     color: '#3E2723',
   },
   pointDesc: {
-    fontSize: 12,
+    fontSize: f(12),
     color: '#6D4C41',
     fontWeight: '600',
   },
   permissionMascotWrapper: {
-    marginVertical: 8,
+    marginVertical: s(8),
   },
   permissionMascot: {
-    width: SCREEN_WIDTH * 0.35, // responsive
+    width: SCREEN_WIDTH * 0.35,
     height: SCREEN_WIDTH * 0.4,
-    maxWidth: 150,
-    maxHeight: 170,
+    maxWidth: s(150),
+    maxHeight: s(170),
   },
   permissionButtonsWrapper: {
     width: '100%',
-    gap: 10,
-    marginBottom: 10,
+    gap: s(10),
+    marginBottom: s(10),
   },
   btnUseCamera: {
     backgroundColor: '#02B3C9',
-    borderRadius: 32,
+    borderRadius: s(32),
     borderWidth: 2,
     borderColor: '#00838F',
     flexDirection: 'row',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingVertical: s(16),
+    paddingHorizontal: s(24),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#00838F',
@@ -1268,32 +1460,32 @@ const styles = StyleSheet.create({
   },
   btnUseCameraText: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: f(22),
     fontWeight: '900',
   },
   readyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: s(10),
   },
   cardsRowWrapper: {
-    height: 155,
-    marginVertical: 8,
+    height: s(155),
+    marginVertical: s(8),
   },
   cardsScrollContent: {
     alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 14,
+    paddingHorizontal: s(10),
+    gap: s(14),
   },
   ruleCard: {
-    width: isTablet ? 190 : 155,
+    width: isTablet ? s(190) : s(155),
     backgroundColor: '#FFFDF9',
-    borderRadius: 24,
+    borderRadius: s(24),
     borderWidth: 3,
     borderColor: '#E6D7BD',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: s(14),
+    paddingHorizontal: s(12),
     alignItems: 'center',
     position: 'relative',
     shadowColor: '#8D6E63',
@@ -1304,10 +1496,10 @@ const styles = StyleSheet.create({
   },
   cardBadge: {
     position: 'absolute',
-    top: -12,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    top: -s(12),
+    width: s(26),
+    height: s(26),
+    borderRadius: s(13),
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 3,
@@ -1318,16 +1510,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   ruleIconRoundBg: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: s(70),
+    height: s(70),
+    borderRadius: s(35),
     backgroundColor: '#F9F4EA',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   ruleCardLabel: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '900',
     color: '#5C4033',
     textAlign: 'center',
@@ -1337,29 +1529,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDF4',
     borderWidth: 2,
     borderColor: '#E6D7BD',
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: s(20),
+    padding: s(12),
     alignItems: 'center',
-    marginVertical: 10,
+    marginVertical: s(10),
   },
   levelSelectorHeading: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '800',
     color: '#00796B',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   levelButtonsRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
+    gap: s(8),
+    marginBottom: s(8),
   },
   levelPillBtn: {
     flex: 1,
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: '#ECE0CE',
-    borderRadius: 16,
-    paddingVertical: 8,
+    borderRadius: s(16),
+    paddingVertical: s(8),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1368,7 +1560,7 @@ const styles = StyleSheet.create({
     borderColor: '#00838F',
   },
   levelPillText: {
-    fontSize: 13,
+    fontSize: f(13),
     fontWeight: '800',
     color: '#5C4033',
   },
@@ -1376,7 +1568,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   levelDescriptionPill: {
-    fontSize: 12,
+    fontSize: f(12),
     color: '#7A5C4F',
     fontWeight: '700',
   },
@@ -1385,14 +1577,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     width: '100%',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginVertical: 8,
+    paddingHorizontal: s(16),
+    marginVertical: s(8),
   },
   mascotReady: {
     width: SCREEN_WIDTH * 0.3,
     height: SCREEN_WIDTH * 0.35,
-    maxWidth: 130,
-    maxHeight: 150,
+    maxWidth: s(130),
+    maxHeight: s(150),
   },
   woodSignpost: {
     alignItems: 'center',
@@ -1401,9 +1593,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#8D6E63',
     borderWidth: 3,
     borderColor: '#5D4037',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: s(8),
+    paddingVertical: s(6),
+    paddingHorizontal: s(12),
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
@@ -1414,21 +1606,21 @@ const styles = StyleSheet.create({
   },
   woodSignText: {
     color: '#FFF',
-    fontSize: 15,
+    fontSize: f(15),
     fontWeight: '900',
   },
   woodSignPole: {
-    width: 8,
-    height: 35,
+    width: s(8),
+    height: s(35),
     backgroundColor: '#5D4037',
   },
   btnStartCalmMoves: {
     backgroundColor: '#02B3C9',
-    borderRadius: 32,
+    borderRadius: s(32),
     borderWidth: 2,
     borderColor: '#00838F',
     width: '100%',
-    paddingVertical: 16,
+    paddingVertical: s(16),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#00838F',
@@ -1436,27 +1628,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 4,
-    marginBottom: 10,
+    marginBottom: s(10),
   },
   btnStartCalmMovesText: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: f(22),
     fontWeight: '900',
   },
   playContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: s(8),
   },
   stepHeaderCard: {
     width: '100%',
     backgroundColor: '#FFFDF9',
-    borderRadius: 24,
+    borderRadius: s(24),
     borderWidth: 2,
     borderColor: '#E6D7BD',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: s(8),
+    paddingHorizontal: s(16),
     alignItems: 'center',
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: 2 },
@@ -1465,19 +1657,19 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   stepHeaderText: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '800',
     color: '#00796B',
-    marginBottom: 4,
+    marginBottom: s(4),
   },
   stepDotsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
   },
   stepProgressDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: s(12),
+    height: s(12),
+    borderRadius: s(6),
     backgroundColor: '#ECE0CE',
     borderWidth: 1.5,
     borderColor: '#D7CCC8',
@@ -1494,49 +1686,49 @@ const styles = StyleSheet.create({
   instructionBannerCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: s(24),
     borderWidth: 3,
     borderColor: '#ECE0CE',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: s(12),
+    paddingHorizontal: s(16),
     position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
-    marginVertical: 6,
+    marginVertical: s(6),
   },
   instructionIconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: s(48),
+    height: s(48),
+    borderRadius: s(24),
     backgroundColor: '#E0F2F1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: s(12),
   },
   instructionCardText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '900',
     color: '#3E2723',
   },
   peekingMascotImage: {
-    width: 60,
-    height: 70,
+    width: s(60),
+    height: s(70),
     position: 'absolute',
-    right: 4,
-    top: -24,
+    right: s(4),
+    top: -s(24),
   },
   viewportWrapper: {
     flex: 1,
     width: '100%',
-    maxHeight: isTablet ? 380 : 340,
+    maxHeight: isTablet ? s(380) : s(340),
     aspectRatio: isTablet ? 1.2 : 0.95,
-    borderRadius: 32,
+    borderRadius: s(32),
     borderWidth: 4,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
@@ -1546,7 +1738,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
     backgroundColor: '#000',
-    marginVertical: 6,
+    marginVertical: s(6),
     alignSelf: 'center',
   },
   cameraView: {
@@ -1565,16 +1757,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.25)',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: s(16),
   },
   breathingIndicator: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: s(76),
+    height: s(76),
+    borderRadius: s(38),
     borderWidth: 4,
     borderColor: '#FFF',
     alignSelf: 'center',
-    marginTop: isTablet ? 25 : 35,
+    marginTop: isTablet ? s(25) : s(35),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 150, 136, 0.45)',
@@ -1585,42 +1777,42 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   breathingIndicatorSim: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: s(84),
+    height: s(84),
+    borderRadius: s(42),
     borderWidth: 4,
     borderColor: '#02B3C9',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(2, 179, 201, 0.2)',
-    marginVertical: 12,
+    marginVertical: s(12),
   },
   breathingText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: f(10),
     fontWeight: '900',
     letterSpacing: 0.5,
   },
   progressBarWrapper: {
     width: '100%',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    marginBottom: 6,
+    paddingHorizontal: s(12),
+    marginBottom: s(6),
   },
   progressLabel: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: f(12),
     fontWeight: '900',
-    marginBottom: 4,
+    marginBottom: s(4),
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
   progressBarOutline: {
     width: '100%',
-    height: 12,
+    height: s(12),
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 6,
+    borderRadius: s(6),
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
@@ -1628,16 +1820,16 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     backgroundColor: '#00E676',
-    borderRadius: 6,
+    borderRadius: s(6),
   },
   alertShakeCard: {
     position: 'absolute',
-    top: 15,
+    top: s(15),
     left: '10%',
     right: '10%',
     backgroundColor: 'rgba(211, 47, 47, 0.95)',
-    borderRadius: 16,
-    paddingVertical: 6,
+    borderRadius: s(16),
+    paddingVertical: s(6),
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#FFF',
@@ -1645,25 +1837,25 @@ const styles = StyleSheet.create({
   alertShakeText: {
     color: '#FFF',
     fontWeight: '900',
-    fontSize: 12,
+    fontSize: f(12),
   },
   simulatedContainer: {
     flex: 1,
     backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: s(16),
   },
   statusInstructionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFDF0',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+    paddingVertical: s(8),
+    paddingHorizontal: s(20),
+    borderRadius: s(24),
     borderWidth: 2,
     borderColor: '#F2E2C9',
-    marginVertical: 4,
+    marginVertical: s(4),
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -1672,16 +1864,16 @@ const styles = StyleSheet.create({
   },
   statusInstructionText: {
     color: '#5C4033',
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '800',
   },
   btnGameplayPause: {
     backgroundColor: '#02B3C9',
-    borderRadius: 28,
+    borderRadius: s(28),
     borderWidth: 2,
     borderColor: '#00838F',
-    paddingVertical: 12,
-    paddingHorizontal: 36,
+    paddingVertical: s(12),
+    paddingHorizontal: s(36),
     shadowColor: '#00838F',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -1690,7 +1882,7 @@ const styles = StyleSheet.create({
   },
   btnGameplayPauseText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: f(18),
     fontWeight: '900',
   },
   modalPauseOverlay: {
@@ -1708,10 +1900,10 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 400,
     backgroundColor: '#FFFDF9',
-    borderRadius: 24,
+    borderRadius: s(24),
     borderWidth: 3.5,
     borderColor: '#ECE0CE',
-    padding: 24,
+    padding: s(24),
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -1720,20 +1912,20 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   modalPauseHeading: {
-    fontSize: 20,
+    fontSize: f(20),
     fontWeight: '900',
     color: '#00796B',
-    marginBottom: 20,
+    marginBottom: s(20),
   },
   modalPauseBtn: {
     backgroundColor: '#02B3C9',
     borderWidth: 2,
     borderColor: '#00838F',
-    borderRadius: 24,
+    borderRadius: s(24),
     width: '100%',
-    paddingVertical: 12,
+    paddingVertical: s(12),
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: s(12),
   },
   modalPauseExitBtn: {
     backgroundColor: '#EF5350',
@@ -1741,17 +1933,26 @@ const styles = StyleSheet.create({
   },
   modalPauseBtnText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '900',
   },
   resultsContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: s(10),
+  },
+  resultsScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  resultsScrollContent: {
+    alignItems: 'center',
+    paddingVertical: s(10),
+    paddingBottom: s(30),
   },
   resultsTitle: {
-    fontSize: 32,
+    fontSize: f(32),
     fontWeight: '900',
     color: '#00796B',
     textAlign: 'center',
@@ -1760,30 +1961,30 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   resultsSubtitle: {
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '800',
     color: '#5C4033',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   resultsLayoutRow: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
     justifyContent: 'space-around',
-    marginVertical: 8,
+    marginVertical: s(8),
   },
   celebrationMascot: {
     width: SCREEN_WIDTH * 0.35,
     height: SCREEN_WIDTH * 0.4,
-    maxWidth: 150,
-    maxHeight: 170,
+    maxWidth: s(150),
+    maxHeight: s(170),
   },
   scoreResultBadge: {
     backgroundColor: '#FFFDF4',
     borderWidth: 3.5,
     borderColor: '#ECE0CE',
-    borderRadius: 28,
-    padding: 16,
+    borderRadius: s(28),
+    padding: s(16),
     alignItems: 'center',
     width: '45%',
     maxWidth: 200,
@@ -1794,15 +1995,15 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   scoreBadgeLabel: {
-    fontSize: 13,
+    fontSize: f(13),
     fontWeight: '800',
     color: '#00796B',
   },
   scoreBadgeNumber: {
-    fontSize: 48,
+    fontSize: f(48),
     fontWeight: '900',
     color: '#009688',
-    marginVertical: 2,
+    marginVertical: s(2),
   },
   scoreStarsRow: {
     flexDirection: 'row',
@@ -1812,16 +2013,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginVertical: 10,
-    gap: 8,
+    marginVertical: s(10),
+    gap: s(8),
   },
   feedbackCardItem: {
     flex: 1,
     backgroundColor: '#FFFDF9',
     borderWidth: 2,
     borderColor: '#ECE0CE',
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: s(20),
+    padding: s(8),
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1830,22 +2031,22 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   feedbackBadgeIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: s(40),
+    height: s(40),
+    borderRadius: s(20),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: s(4),
   },
   feedbackCardLabel: {
-    fontSize: 10,
+    fontSize: f(10),
     fontWeight: '800',
     color: '#6D4C41',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: s(2),
   },
   feedbackCardValue: {
-    fontSize: 15,
+    fontSize: f(15),
     fontWeight: '900',
     color: '#00796B',
   },
@@ -1853,34 +2054,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDE7',
     borderWidth: 2,
     borderColor: '#F0E4CE',
-    borderRadius: 24,
+    borderRadius: s(24),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: s(10),
+    paddingHorizontal: s(16),
     width: '100%',
-    marginBottom: 12,
+    marginBottom: s(12),
   },
   awardIconBadge: {
-    marginRight: 10,
+    marginRight: s(10),
   },
   awardCardText: {
     color: '#5C4033',
-    fontSize: 15,
+    fontSize: f(15),
     fontWeight: '900',
     flex: 1,
   },
   resultsButtonsWrapper: {
     width: '100%',
-    gap: 8,
+    gap: s(8),
   },
   btnNextAdventure: {
     backgroundColor: '#02B3C9',
-    borderRadius: 32,
+    borderRadius: s(32),
     borderWidth: 2,
     borderColor: '#00838F',
     width: '100%',
-    paddingVertical: 14,
+    paddingVertical: s(14),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#00838F',
@@ -1891,16 +2092,16 @@ const styles = StyleSheet.create({
   },
   btnNextAdventureText: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: f(20),
     fontWeight: '900',
   },
   btnPlayAgainResult: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 32,
+    borderRadius: s(32),
     borderWidth: 2.5,
     borderColor: '#ECE0CE',
     width: '100%',
-    paddingVertical: 12,
+    paddingVertical: s(12),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#8D6E63',
@@ -1911,7 +2112,44 @@ const styles = StyleSheet.create({
   },
   btnPlayAgainResultText: {
     color: '#5C4033',
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '900',
+  },
+  insightsCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: s(24),
+    borderWidth: 2.5,
+    borderColor: '#ECE0CE',
+    padding: s(18),
+    marginVertical: s(10),
+    shadowColor: '#8D6E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  insightsTitle: {
+    fontSize: f(16),
+    fontWeight: '900',
+    color: '#00796B',
+    marginBottom: s(12),
+    textAlign: 'center',
+  },
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: s(10),
+    gap: s(10),
+  },
+  insightEmoji: {
+    fontSize: f(20),
+    marginTop: s(1),
+  },
+  insightText: {
+    fontSize: f(12),
+    color: '#5C4033',
+    fontWeight: '700',
+    lineHeight: f(16),
   },
 });
