@@ -57,8 +57,8 @@ Given the following data:
 - Calm Score: ${requestDto.calmScore}
 
 Generate a JSON response with:
-1. encouragement: A child-friendly, encouraging message (simple language)
-2. teacherRecommendation: A brief recommendation for the teacher
+1. encouragement: A child-friendly, encouraging message (simple language). If suggesting Cloud Valley, encourage doing slow, physical movements and deep breathing.
+2. teacherRecommendation: A brief recommendation for the teacher. If recommending Cloud Valley, explain how slow physical calm moves help improve inhibitory control, working memory, cognitive flexibility, and emotional regulation.
 3. suggestedActivity: One of: "noise_souk", "gate_of_patience", "cloud_valley", "backpack_oasis"
 4. reduceDistractors: boolean (true if omissions > 5)
 5. slowGameplay: boolean (true if commissions > 5)
@@ -91,9 +91,20 @@ Return ONLY valid JSON, no other text.`;
       suggestedActivity = 'GATE_OF_PATIENCE';
     }
 
+    let encouragement = 'You are doing great! Keep trying your best!';
+    let teacherRecommendation = 'Continue monitoring progress and adjust difficulty as needed.';
+
+    if (suggestedActivity === 'CLOUD_VALLEY') {
+      encouragement = 'Take a deep breath and let\'s do some slow, calm moves in Cloud Valley!';
+      teacherRecommendation = 'The child shows signs of stress or low calm score. Cloud Valley Calm Moves (physical exercises like arm raises, shoulder rolls, and deep breathing) are recommended. These physical interventions improve inhibitory control, working memory, and emotional regulation.';
+    } else if (suggestedActivity === 'GATE_OF_PATIENCE') {
+      encouragement = 'You are doing well! Let\'s practice waiting and patient moves!';
+      teacherRecommendation = 'The child shows signs of impulsivity (commission errors). Recommending Gate of Patience to train impulse control and executive functions.';
+    }
+
     return {
-      encouragement: 'You are doing great! Keep trying your best!',
-      teacherRecommendation: 'Continue monitoring progress and adjust difficulty as needed.',
+      encouragement,
+      teacherRecommendation,
       suggestedActivity,
       difficultyAdjustment: {
         reduceDistractors,

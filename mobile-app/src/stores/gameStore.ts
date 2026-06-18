@@ -61,6 +61,14 @@ export const useGameStore = create<GameState>()(
     {
       name: 'nawat-game-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      merge: (persistedState: any, currentState: GameState) => ({
+        ...currentState,
+        ...persistedState,
+        rewards: {
+          ...currentState.rewards,
+          ...(persistedState as any)?.rewards,
+        },
+      }),
     }
   )
 );
