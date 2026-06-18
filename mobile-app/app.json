@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "NAWAT FOCUS",
+    "slug": "nawat-focus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "nawat-focus",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nawat.focus"
+    },
+    "android": {
+      "package": "com.nawat.focus",
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera"
+    ]
+  }
+}

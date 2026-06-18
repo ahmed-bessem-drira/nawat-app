@@ -1,0 +1,26 @@
+# Node dependency directories
+node_modules/
+**/node_modules/
+
+# Build directories
+dist/
+**/dist/
+.expo/
+**/.expo/
+
+# IDE / Editor configuration
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environmental variables
+.env
+backend/.env
+
+# OS files
+Thumbs.db
+db.json

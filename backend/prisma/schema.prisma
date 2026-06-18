@@ -1,0 +1,83 @@
+// Prisma Schema for NAWAT FOCUS Backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      String   @default("TEACHER") // TEACHER or ADMIN
+  createdAt DateTime @default(now())
+  children  Child[]
+}
+
+model Child {
+  id             String       @id @default(uuid())
+  nickname       String
+  avatar         String
+  language       String       @default("ENGLISH") // ARABIC, FRENCH, or ENGLISH
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions       Session[]
+  moods          MoodEntry[]
+  metrics        GameMetrics[]
+  recommendations Recommendation[]
+  createdAt      DateTime     @default(now())
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  childId   String
+  child     Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  gameType  String   // NOISE_SOUK, GATE_OF_PATIENCE, CLOUD_VALLEY, BACKPACK_OASIS
+  duration  Int      // in seconds
+  createdAt DateTime @default(now())
+  metrics   GameMetrics[]
+}
+
+model GameMetrics {
+  id                       String   @id @default(uuid())
+  sessionId                String
+  session                  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  childId                  String
+  child                    Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  gameType                 String   // NOISE_SOUK, GATE_OF_PATIENCE, CLOUD_VALLEY, BACKPACK_OASIS
+  omissions                Int?
+  commissions              Int?
+  reactionTime             Float?   // in milliseconds
+  reactionTimeVariability  Float?
+  accuracy                 Float?   // 0-100
+  smoothness               Float?   // 0-100
+  completionTime           Int?     // in milliseconds
+  pathDeviation            Float?
+  calmScore                Float?   // 0-100
+  impulsiveResponses       Int?
+  correctInhibition        Int?
+  correctSequence          Int?
+  createdAt                DateTime @default(now())
+}
+
+model MoodEntry {
+  id        String   @id @default(uuid())
+  childId   String
+  child     Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  mood      String   // CALM, HAPPY, TIRED, ANGRY, SAD, EXCITED
+  createdAt DateTime @default(now())
+}
+
+model Recommendation {
+  id                String   @id @default(uuid())
+  childId           String
+  child             Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  content           String
+  encouragement     String
+  suggestedActivity String?  // NOISE_SOUK, GATE_OF_PATIENCE, CLOUD_VALLEY, BACKPACK_OASIS
+  createdAt         DateTime @default(now())
+}
