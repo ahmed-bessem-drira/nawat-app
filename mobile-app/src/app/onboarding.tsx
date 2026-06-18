@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
@@ -119,9 +119,14 @@ export default function OnboardingScreen() {
       {step === 3 && (
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Your Name:</Text>
-          <Text style={styles.input} onPress={() => setNickname('Child')}>
-            {nickname || 'Tap to enter name'}
-          </Text>
+          <TextInput
+            style={styles.input}
+            value={nickname}
+            onChangeText={setNickname}
+            placeholder="Type your name..."
+            placeholderTextColor="#A5D6A7"
+            autoFocus
+          />
         </View>
       )}
 
