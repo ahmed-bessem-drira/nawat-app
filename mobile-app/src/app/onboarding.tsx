@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
 
@@ -14,9 +14,13 @@ const LANGUAGES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ selectedLanguage?: string }>();
   const { setChild } = useChildStore();
-  const [step, setStep] = useState(1);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('ENGLISH');
+  
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(
+    params.selectedLanguage || 'ENGLISH'
+  );
+  const [step, setStep] = useState(params.selectedLanguage ? 2 : 1);
   const [selectedAvatar, setSelectedAvatar] = useState<string>(AVATARS[0]);
   const [nickname, setNickname] = useState('');
 

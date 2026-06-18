@@ -9,7 +9,7 @@ import { databaseService } from '@/services/database.service';
 
 export default function FocusGardenScreen() {
   const router = useRouter();
-  const { rewards, resetRewards } = useGameStore();
+  const { rewards } = useGameStore();
   const { child, currentMood } = useChildStore();
   const [recommendations, setRecommendations] = React.useState<any[]>([]);
   const [encouragement, setEncouragement] = React.useState('');
@@ -39,7 +39,7 @@ export default function FocusGardenScreen() {
   };
 
   const handleResetRewards = () => {
-    resetRewards();
+    rewards.resetRewards();
   };
 
   const getGardenLevel = () => {
