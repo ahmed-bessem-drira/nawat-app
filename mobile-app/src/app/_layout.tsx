@@ -7,6 +7,7 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="choose-explorer" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="mood-check-in" />
         <Stack.Screen name="village-map" />

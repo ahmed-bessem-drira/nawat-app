@@ -14,14 +14,18 @@ const LANGUAGES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ selectedLanguage?: string }>();
+  const params = useLocalSearchParams<{ selectedLanguage?: string; selectedAvatar?: string }>();
   const { setChild } = useChildStore();
   
   const [selectedLanguage, setSelectedLanguage] = useState<string>(
     params.selectedLanguage || 'ENGLISH'
   );
-  const [step, setStep] = useState(params.selectedLanguage ? 2 : 1);
-  const [selectedAvatar, setSelectedAvatar] = useState<string>(AVATARS[0]);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>(
+    params.selectedAvatar || AVATARS[0]
+  );
+  const [step, setStep] = useState(
+    params.selectedAvatar ? 3 : params.selectedLanguage ? 2 : 1
+  );
   const [nickname, setNickname] = useState('');
 
   const handleNext = async () => {

@@ -119,7 +119,7 @@ export default function IndexScreen() {
       router.push('/mood-check-in');
     } else {
       router.push({
-        pathname: '/onboarding',
+        pathname: '/choose-explorer',
         params: { selectedLanguage: selectedLang },
       });
     }
