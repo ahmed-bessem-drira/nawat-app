@@ -1,27 +1,54 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { getTranslation } from '@/i18n/translations';
 import * as Haptics from 'expo-haptics';
+
+const { width: SW, height: SH } = Dimensions.get('window');
+
+const GAME_DURATION = 60;
+const BASE_SPAWN_INTERVAL = 1200;
+const MIN_SPAWN_INTERVAL = 500;
+const ITEM_LIFETIME = 2000;
+const OBJ_SIZE = 64;
+
+const SOUK_COLORS = {
+  bg: '#FDF6E3',
+  awning: '#D32F2F',
+  awningStripe: '#B71C1C',
+  stall: '#8D6E63',
+  gold: '#FFB300',
+  text: '#3E2723',
+  textLight: '#5D4037',
+  target: '#4CAF50',
+  distractor: '#FF5722',
+  targetLabel: '🍏',
+  distractorLabel: '🧡',
+};
+
+const DISTRACTOR_EMOJIS = ['🧡', '🍊', '🧶', '📿', '🔶'];
+const TARGET_EMOJI = '🍏';
 
 interface GameObject {
   id: string;
   x: number;
   y: number;
   isTarget: boolean;
-  color: string;
+  spawnTime: number;
+  anim: Animated.Value;
+  emoji: string;
 }
-
-const GAME_DURATION = 60; // seconds
-const SPAWN_INTERVAL = 1000; // ms
 
 export default function NoiseSoukScreen() {
   const router = useRouter();
   const { startSession, endSession, clearSession, rewards } = useGameStore();
   const { child } = useChildStore();
-  
+  const lang = child?.language;
+
+  const [state, setState] = useState<'intro' | 'playing' | 'gameover'>('intro');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [score, setScore] = useState(0);
   const [objects, setObjects] = useState<GameObject[]>([]);
@@ -29,112 +56,200 @@ export default function NoiseSoukScreen() {
   const [omissions, setOmissions] = useState(0);
   const [commissions, setCommissions] = useState(0);
   const [reactionTimes, setReactionTimes] = useState<number[]>([]);
-  const [targetSpawnTime, setTargetSpawnTime] = useState<number>(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  
+  const [combo, setCombo] = useState(0);
+
   const spawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const cleanupTimersRef = useRef<Set<NodeJS.Timeout>>(new Set());
+  const elapsedRef = useRef(0);
+  const isActiveRef = useRef(false);
+  const gameAreaRef = useRef<View>(null);
+  const gameAreaBounds = useRef({ width: SW - 40, height: SH * 0.55 });
+  const scoreRef = useRef(score);
+  const omissionsRef = useRef(omissions);
+  const commissionsRef = useRef(commissions);
+  const reactionTimesRef = useRef(reactionTimes);
+  const comboRef = useRef(combo);
+  scoreRef.current = score;
+  omissionsRef.current = omissions;
+  commissionsRef.current = commissions;
+  reactionTimesRef.current = reactionTimes;
+  comboRef.current = combo;
 
-  useEffect(() => {
-    startSession('NOISE_SOUK');
-    setIsPlaying(true);
-    startGame();
+  const t = useCallback((key: string) => getTranslation(lang, key), [lang]);
 
-    return () => {
-      cleanup();
-    };
-  }, []);
-
-  const cleanup = () => {
+  const cleanup = useCallback(() => {
     if (spawnIntervalRef.current) clearInterval(spawnIntervalRef.current);
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-  };
+    spawnIntervalRef.current = null;
+    timerIntervalRef.current = null;
+  }, []);
 
-  const startGame = () => {
-    spawnIntervalRef.current = setInterval(() => {
-      spawnObject();
-    }, SPAWN_INTERVAL);
+  const startGame = useCallback(() => {
+    isActiveRef.current = true;
+    elapsedRef.current = 0;
+
+    const tick = () => {
+      elapsedRef.current += 1;
+      const progress = elapsedRef.current / GAME_DURATION;
+      const interval = BASE_SPAWN_INTERVAL - progress * (BASE_SPAWN_INTERVAL - MIN_SPAWN_INTERVAL);
+
+      spawnObject(progress);
+
+      if (isActiveRef.current) {
+        spawnIntervalRef.current = setTimeout(tick, interval);
+      }
+    };
+
+    spawnIntervalRef.current = setTimeout(tick, 500);
 
     timerIntervalRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          endGame();
+          endGameRef.current();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  };
+  }, []);
 
-  const spawnObject = () => {
-    const isTarget = Math.random() > 0.4; // 60% targets
-    const newObject: GameObject = {
-      id: Date.now().toString(),
-      x: Math.random() * 200 + 50,
-      y: Math.random() * 400 + 100,
-      isTarget,
-      color: isTarget ? '#4CAF50' : '#FF5722',
-    };
+  const getSpawnPosition = (existing: GameObject[], progress: number) => {
+    const pad = OBJ_SIZE;
+    const w = gameAreaBounds.current.width - pad * 2;
+    const h = gameAreaBounds.current.height - pad * 2;
+    let attempts = 0;
+    let x: number, y: number, overlap: boolean;
 
-    setObjects((prev) => [...prev, newObject]);
-
-    if (isTarget) {
-      setTargetSpawnTime(Date.now());
-    }
-
-    // Remove object after 2 seconds if not tapped
-    setTimeout(() => {
-      setObjects((prev) => {
-        const obj = prev.find((o) => o.id === newObject.id);
-        if (obj && obj.isTarget && !gameOver) {
-          setOmissions((prev) => prev + 1);
-        }
-        return prev.filter((o) => o.id !== newObject.id);
+    do {
+      x = pad + Math.random() * w;
+      y = pad + Math.random() * h;
+      overlap = existing.some((o) => {
+        const dx = o.x - x;
+        const dy = o.y - y;
+        return Math.sqrt(dx * dx + dy * dy) < OBJ_SIZE + 8;
       });
-    }, 2000);
+      attempts++;
+    } while (overlap && attempts < 20);
+
+    return { x, y };
   };
+
+  const spawnObject = useCallback((progress: number) => {
+    const targetRatio = Math.max(0.35, 0.6 - progress * 0.25);
+    const isTarget = Math.random() < targetRatio;
+    const objId = Date.now().toString() + Math.random();
+
+    setObjects((prev) => {
+      const { x, y } = getSpawnPosition(prev, progress);
+      const obj: GameObject = {
+        id: objId,
+        x,
+        y,
+        isTarget,
+        spawnTime: Date.now(),
+        anim: new Animated.Value(0),
+        emoji: isTarget ? TARGET_EMOJI : DISTRACTOR_EMOJIS[Math.floor(Math.random() * DISTRACTOR_EMOJIS.length)],
+      };
+
+      Animated.spring(obj.anim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+
+      return [...prev, obj];
+    });
+
+    const timer = setTimeout(() => {
+      cleanupTimersRef.current.delete(timer);
+      setObjects((prev) => {
+        if (!isActiveRef.current) return prev;
+        const match = prev.find((o) => o.id === objId);
+        if (match && isTarget) {
+          setOmissions((n) => n + 1);
+        }
+        return prev.filter((o) => o.id !== objId);
+      });
+    }, ITEM_LIFETIME);
+    cleanupTimersRef.current.add(timer);
+  }, []);
+
+  useEffect(() => {
+    if (state !== 'playing') return;
+    startSession('NOISE_SOUK');
+    startGame();
+    return () => {
+      isActiveRef.current = false;
+      cleanup();
+      cleanupTimersRef.current.forEach(clearTimeout);
+      cleanupTimersRef.current.clear();
+    };
+  }, [state]);
 
   const handleObjectTap = (obj: GameObject) => {
-    const reactionTime = Date.now() - targetSpawnTime;
-    
+    if (!isActiveRef.current) return;
+
+    const reactionTime = Date.now() - obj.spawnTime;
+
+    setObjects((prev) => {
+      const match = prev.find((o) => o.id === obj.id);
+      if (!match) return prev;
+
+      Animated.timing(match.anim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
+
+      return prev.filter((o) => o.id !== obj.id);
+    });
+
     if (obj.isTarget) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setScore((prev) => prev + 10);
+      setScore((prev) => prev + 10 + comboRef.current * 2);
       setCorrectHits((prev) => prev + 1);
       setReactionTimes((prev) => [...prev, reactionTime]);
+      setCombo((prev) => prev + 1);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setScore((prev) => Math.max(0, prev - 5));
       setCommissions((prev) => prev + 1);
+      setCombo(0);
     }
-
-    setObjects((prev) => prev.filter((o) => o.id !== obj.id));
   };
 
-  const endGame = async () => {
+  const endGameRef = useRef<() => void>(() => {});
+  const endGame = useCallback(async () => {
+    isActiveRef.current = false;
     cleanup();
-    setIsPlaying(false);
-    setGameOver(true);
+    cleanupTimersRef.current.forEach(clearTimeout);
+    cleanupTimersRef.current.clear();
+    setState('gameover');
 
-    const avgReactionTime = reactionTimes.length > 0 
-      ? reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length 
+    const rt = reactionTimesRef.current;
+    const avgReactionTime = rt.length > 0
+      ? rt.reduce((a, b) => a + b, 0) / rt.length
       : 0;
 
-    const reactionTimeVariability = reactionTimes.length > 1
-      ? Math.sqrt(reactionTimes.reduce((sum, rt) => sum + Math.pow(rt - avgReactionTime, 2), 0) / reactionTimes.length)
+    const reactionTimeVariability = rt.length > 1
+      ? Math.sqrt(rt.reduce((sum, v) => sum + Math.pow(v - avgReactionTime, 2), 0) / rt.length)
       : 0;
+
+    const finalOmissions = omissionsRef.current;
+    const finalCommissions = commissionsRef.current;
+    const finalScore = scoreRef.current;
 
     const metrics = {
-      omissions,
-      commissions,
+      omissions: finalOmissions,
+      commissions: finalCommissions,
       reactionTime: avgReactionTime,
       reactionTimeVariability,
     };
 
     endSession(metrics);
 
-    // Save to database
     if (child) {
       const sessionId = Date.now().toString();
       await databaseService.insert('session', {
@@ -151,32 +266,30 @@ export default function NoiseSoukScreen() {
         session_id: sessionId,
         child_id: child.id,
         game_type: 'NOISE_SOUK',
-        omissions,
-        commissions,
+        omissions: finalOmissions,
+        commissions: finalCommissions,
         reaction_time: avgReactionTime,
         reaction_time_variability: reactionTimeVariability,
         synced: 0,
         created_at: Date.now(),
       });
 
-      // Award rewards
-      if (score > 50) {
-        rewards.addWaterDrop();
-      }
-      if (score > 100) {
-        rewards.addFlower();
-      }
+      if (finalScore > 50) rewards.addWaterDrop();
+      if (finalScore > 100) rewards.addFlower();
     }
-  };
+  }, [child]);
+
+  endGameRef.current = endGame;
 
   const handleBack = () => {
+    isActiveRef.current = false;
     cleanup();
     clearSession();
     router.back();
   };
 
   const handlePlayAgain = () => {
-    setGameOver(false);
+    setState('intro');
     setTimeLeft(GAME_DURATION);
     setScore(0);
     setObjects([]);
@@ -184,132 +297,401 @@ export default function NoiseSoukScreen() {
     setOmissions(0);
     setCommissions(0);
     setReactionTimes([]);
-    setIsPlaying(true);
-    startGame();
+    setCombo(0);
   };
 
-  if (gameOver) {
+  if (state === 'intro') {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Game Over!</Text>
-        <Text style={styles.score}>Score: {score}</Text>
-        <Text style={styles.stat}>Correct Hits: {correctHits}</Text>
-        <Text style={styles.stat}>Omissions: {omissions}</Text>
-        <Text style={styles.stat}>Commissions: {commissions}</Text>
-        
-        <TouchableOpacity style={styles.button} onPress={handlePlayAgain}>
-          <Text style={styles.buttonText}>Play Again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleBack}>
-          <Text style={styles.buttonText}>Back to Map</Text>
-        </TouchableOpacity>
+      <View style={s.container}>
+        <View style={s.awning}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={[s.awningStripe, { backgroundColor: i % 2 === 0 ? SOUK_COLORS.awning : SOUK_COLORS.awningStripe }]} />
+          ))}
+        </View>
+        <View style={s.introContent}>
+          <Text style={s.soukTitle}>🛍️ {t('noiseSouk.title')}</Text>
+          <Text style={s.soukDesc}>{t('noiseSouk.description')}</Text>
+
+          <View style={s.rulesCard}>
+            <View style={s.ruleRow}>
+              <Text style={s.ruleEmoji}>{TARGET_EMOJI}</Text>
+              <Text style={s.ruleText}>{t('noiseSouk.instruction')}</Text>
+            </View>
+            <View style={s.ruleRow}>
+              <Text style={s.ruleEmoji}>{DISTRACTOR_EMOJIS[0]}</Text>
+              <Text style={s.ruleText}>{t('noiseSouk.ignore')}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={s.startBtn} onPress={() => setState('playing')} activeOpacity={0.8}>
+            <Text style={s.startBtnText}>🛒 {t('noiseSouk.playAgain')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={s.secondaryBtn} onPress={handleBack} activeOpacity={0.7}>
+            <Text style={s.secondaryBtnText}>{t('noiseSouk.backToMap')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (state === 'gameover') {
+    return (
+      <View style={s.container}>
+        <View style={s.awning}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={[s.awningStripe, { backgroundColor: i % 2 === 0 ? SOUK_COLORS.awning : SOUK_COLORS.awningStripe }]} />
+          ))}
+        </View>
+        <View style={s.gameoverContent}>
+          <Text style={s.gameoverTitle}>🎉 {t('noiseSouk.gameOver')}</Text>
+          <Text style={s.finalScore}>{t('noiseSouk.score')}: {score}</Text>
+
+          <View style={s.statsCard}>
+            <View style={s.statRow}>
+              <Text style={s.statLabel}>✅ {t('noiseSouk.correctHits')}</Text>
+              <Text style={s.statValue}>{correctHits}</Text>
+            </View>
+            <View style={s.divider} />
+            <View style={s.statRow}>
+              <Text style={s.statLabel}>⭕ {t('noiseSouk.omissions')}</Text>
+              <Text style={s.statValue}>{omissions}</Text>
+            </View>
+            <View style={s.divider} />
+            <View style={s.statRow}>
+              <Text style={s.statLabel}>❌ {t('noiseSouk.commissions')}</Text>
+              <Text style={s.statValue}>{commissions}</Text>
+            </View>
+          </View>
+
+          {score > 50 && (
+            <Text style={s.rewardEarned}>
+              {score > 100 ? '💧🌸 ' : '💧 '}
+              {t('cloudValley.earnedWaterDrop')}
+            </Text>
+          )}
+
+          <TouchableOpacity style={s.startBtn} onPress={handlePlayAgain} activeOpacity={0.8}>
+            <Text style={s.startBtnText}>🔄 {t('noiseSouk.playAgain')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={s.secondaryBtn} onPress={handleBack} activeOpacity={0.7}>
+            <Text style={s.secondaryBtnText}>{t('noiseSouk.backToMap')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.timer}>{timeLeft}s</Text>
-        <Text style={styles.score}>Score: {score}</Text>
+    <View style={s.container}>
+      <View style={s.awning}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <View key={i} style={[s.awningStripe, { backgroundColor: i % 2 === 0 ? SOUK_COLORS.awning : SOUK_COLORS.awningStripe }]} />
+        ))}
       </View>
 
-      <Text style={styles.instruction}>Tap the GREEN circles!</Text>
-      <Text style={styles.instruction}>Ignore the ORANGE circles!</Text>
+      <View style={s.header}>
+        <TouchableOpacity onPress={handleBack} style={s.headerBtn}>
+          <Text style={s.backArrow}>←</Text>
+        </TouchableOpacity>
+        <View style={s.headerCenter}>
+          <Text style={s.timer}>⏱️ {timeLeft}s</Text>
+          {combo > 1 && <Text style={s.combo}>🔥 x{combo}</Text>}
+        </View>
+        <Text style={s.headerScore}>🏆 {score}</Text>
+      </View>
 
-      <View style={styles.gameArea}>
+      <View style={s.instructionsBar}>
+        <Text style={s.instructionText}>
+          {t('noiseSouk.instruction')} {TARGET_EMOJI} &nbsp;|&nbsp; {t('noiseSouk.ignore')} {DISTRACTOR_EMOJIS[0]}
+        </Text>
+      </View>
+
+      <View
+        ref={gameAreaRef}
+        style={s.gameArea}
+        onLayout={(e) => {
+          gameAreaBounds.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
+        }}
+      >
+        <View style={s.stallTop} />
         {objects.map((obj) => (
-          <TouchableOpacity
+          <Animated.View
             key={obj.id}
             style={[
-              styles.gameObject,
-              { 
-                left: obj.x, 
-                top: obj.y, 
-                backgroundColor: obj.color,
+              s.gameObject,
+              {
+                left: obj.x,
+                top: obj.y,
+                opacity: obj.anim,
+                transform: [{ scale: obj.anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
               },
             ]}
-            onPress={() => handleObjectTap(obj)}
-            activeOpacity={0.7}
-          />
+          >
+            <TouchableOpacity
+              style={[s.objTouch, { backgroundColor: obj.isTarget ? SOUK_COLORS.target : SOUK_COLORS.distractor }]}
+              onPress={() => handleObjectTap(obj)}
+              activeOpacity={0.7}
+            >
+              <Text style={s.objEmoji}>{obj.emoji}</Text>
+            </TouchableOpacity>
+          </Animated.View>
         ))}
+        <View style={s.stallBottom} />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8F5E9',
-    padding: 20,
+    backgroundColor: SOUK_COLORS.bg,
+  },
+  awning: {
+    flexDirection: 'row',
+    height: 28,
+    backgroundColor: SOUK_COLORS.awning,
+    borderBottomWidth: 3,
+    borderBottomColor: SOUK_COLORS.gold,
+  },
+  awningStripe: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(253,246,227,0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0D5C1',
   },
-  backButton: {
-    fontSize: 18,
-    color: '#2E7D32',
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#3E2723',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  backArrow: {
+    fontSize: 22,
+    color: SOUK_COLORS.text,
     fontWeight: 'bold',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   timer: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#2E7D32',
+    color: SOUK_COLORS.text,
   },
-  score: {
-    fontSize: 18,
-    color: '#2E7D32',
-    fontWeight: '600',
-  },
-  instruction: {
+  combo: {
     fontSize: 16,
-    color: '#66BB6A',
+    fontWeight: 'bold',
+    color: '#FF6F00',
+  },
+  headerScore: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: SOUK_COLORS.gold,
+  },
+  instructionsBar: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFF8E1',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE082',
+    alignItems: 'center',
+  },
+  instructionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: SOUK_COLORS.textLight,
     textAlign: 'center',
-    marginBottom: 5,
   },
   gameArea: {
     flex: 1,
+    margin: 8,
+    backgroundColor: '#F5E6CC',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#D7B98E',
     position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+  },
+  stallTop: {
+    height: 6,
+    backgroundColor: SOUK_COLORS.stall,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  stallBottom: {
+    height: 6,
+    backgroundColor: SOUK_COLORS.stall,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
   },
   gameObject: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: OBJ_SIZE,
+    height: OBJ_SIZE,
   },
-  title: {
+  objTouch: {
+    width: OBJ_SIZE,
+    height: OBJ_SIZE,
+    borderRadius: OBJ_SIZE / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  objEmoji: {
+    fontSize: 32,
+  },
+  introContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  soukTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2E7D32',
+    color: SOUK_COLORS.text,
+    marginBottom: 8,
     textAlign: 'center',
-    marginBottom: 20,
   },
-  stat: {
+  soukDesc: {
     fontSize: 18,
-    color: '#2E7D32',
+    color: SOUK_COLORS.textLight,
+    marginBottom: 32,
     textAlign: 'center',
-    marginBottom: 10,
   },
-  button: {
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 10,
+  rulesCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    marginBottom: 32,
+    gap: 16,
+  },
+  ruleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    gap: 12,
   },
-  secondaryButton: {
-    backgroundColor: '#66BB6A',
+  ruleEmoji: {
+    fontSize: 28,
   },
-  buttonText: {
-    color: '#FFFFFF',
+  ruleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SOUK_COLORS.textLight,
+    flex: 1,
+  },
+  startBtn: {
+    backgroundColor: SOUK_COLORS.awning,
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  startBtnText: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  secondaryBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  secondaryBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SOUK_COLORS.textLight,
+    textDecorationLine: 'underline',
+  },
+  gameoverContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  gameoverTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: SOUK_COLORS.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  finalScore: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: SOUK_COLORS.gold,
+    marginBottom: 24,
+  },
+  statsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  statLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: SOUK_COLORS.textLight,
+  },
+  statValue: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: SOUK_COLORS.text,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F0EBE1',
+  },
+  rewardEarned: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 8,
   },
 });
