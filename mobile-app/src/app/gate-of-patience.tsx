@@ -693,13 +693,41 @@ const s = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   pillText: { fontSize: 12, fontWeight: '700', color: '#455A64' },
 
-  previewArea: { width: '100%', height: SH * 0.29, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 5 },
-  explorerImage: { width: SW * 0.42, height: SH * 0.25 },
+  previewArea: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginVertical: 10,
+  },
+  explorerImage: {
+    width: SW * 0.52,
+    height: SH * 0.26,
+    marginTop: -12,
+  },
 
-  nodePreviewsRow: { flexDirection: 'row', justifyContent: 'space-around', flex: 1, gap: 4 },
-  nodePreviewItem: { alignItems: 'center' },
-  nodeLabel: { backgroundColor: '#FFF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginTop: 4, borderWidth: 1, borderColor: '#E0E0E0' },
-  nodeLabelText: { fontSize: 8, fontWeight: '800', color: '#5D4037' },
+  nodePreviewsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 8,
+  },
+  nodePreviewItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  nodeLabel: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  nodeLabelText: { fontSize: 9, fontWeight: '800', color: '#5D4037', textAlign: 'center' },
 
   bottomBox: { width: '100%', alignItems: 'center', gap: 15 },
   tipCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8E1', padding: 12, borderRadius: 16, gap: 10, width: '100%', borderWidth: 1, borderColor: '#FFECB3' },
