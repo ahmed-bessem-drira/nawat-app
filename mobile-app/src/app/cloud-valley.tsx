@@ -44,7 +44,7 @@ type GameScreen = 'PERMISSION' | 'GET_READY' | 'GAMEPLAY' | 'RESULTS';
 interface CalmMoveStep {
   id: number;
   instructionKey: string;
-  iconType: 'hand' | 'both_hands' | 'shoulders' | 'head' | 'balance' | 'breath';
+  iconType: 'hand' | 'both_hands' | 'shoulders' | 'head' | 'balance' | 'breath' | 'stretch_arms';
   durationMs: number;
 }
 
@@ -93,7 +93,7 @@ const LEVELS: Record<number, LevelConfig> = {
       { id: 1, instructionKey: 'cloudValley.raiseOneHand', iconType: 'hand', durationMs: 7000 },
       { id: 2, instructionKey: 'cloudValley.touchShoulders', iconType: 'shoulders', durationMs: 7000 },
       { id: 3, instructionKey: 'cloudValley.putHandsHead', iconType: 'head', durationMs: 7000 },
-      { id: 4, instructionKey: 'cloudValley.balanceFoot', iconType: 'balance', durationMs: 8000 },
+      { id: 4, instructionKey: 'cloudValley.stretchArms', iconType: 'stretch_arms', durationMs: 8000 },
       { id: 5, instructionKey: 'cloudValley.deepBreath', iconType: 'breath', durationMs: 10000 },
     ],
     inhaleDuration: 5000,
@@ -135,9 +135,9 @@ export default function CloudValleyScreen() {
 
   // Gameplay Metrics
   const [calmProgress, setCalmProgress] = useState(0);
-  const [sensorValues, setSensorValues] = useState({ x: 0, y: 0, z: 0 });
   const [isSensorAvailable, setIsSensorAvailable] = useState(true);
-  const [motionVariance, setMotionVariance] = useState(0);
+  const [isShaking, setIsShaking] = useState(false);
+  const isShakingRef = useRef(false);
   const [breathingPhase, setBreathingPhase] = useState<'INHALE' | 'HOLD' | 'EXHALE'>('INHALE');
 
   // Aggregated Scores
@@ -178,7 +178,6 @@ export default function CloudValleyScreen() {
   const calmProgressRef = useRef(0);
 
   // Sync refs with local states
-  useEffect(() => { motionVarianceRef.current = motionVariance; }, [motionVariance]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { currentStepIndexRef.current = currentStepIndex; }, [currentStepIndex]);
@@ -186,6 +185,9 @@ export default function CloudValleyScreen() {
   useEffect(() => { totalStepsRef.current = stepsList.length; }, [stepsList]);
   useEffect(() => { breathingPhaseRef.current = breathingPhase; }, [breathingPhase]);
   useEffect(() => { calmProgressRef.current = calmProgress; }, [calmProgress]);
+
+  // Flag to defer endGame out of render phase
+  const shouldEndGameRef = useRef(false);
 
   // HTML5 Web Video Ref
   const videoRef = useRef<any>(null);
@@ -200,14 +202,23 @@ export default function CloudValleyScreen() {
         const available = await Accelerometer.isAvailableAsync();
         setIsSensorAvailable(available);
         if (available) {
-          Accelerometer.setUpdateInterval(150);
+          if (Platform.OS !== 'web') {
+            Accelerometer.setUpdateInterval(150);
+          }
           subscription = Accelerometer.addListener((data) => {
-            setSensorValues(data);
             const variance =
               Math.abs(data.x - lastX) +
               Math.abs(data.y - lastY) +
               Math.abs(data.z - lastZ);
-            setMotionVariance(variance);
+            
+            motionVarianceRef.current = variance;
+            
+            const shaking = variance > 0.12;
+            if (shaking !== isShakingRef.current) {
+              isShakingRef.current = shaking;
+              setIsShaking(shaking);
+            }
+
             lastX = data.x;
             lastY = data.y;
             lastZ = data.z;
@@ -257,7 +268,7 @@ export default function CloudValleyScreen() {
             const canvas = document.createElement('canvas');
             canvas.width = 64;
             canvas.height = 48;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             let lastFrame: Uint8ClampedArray | null = null;
 
             const checkFrame = () => {
@@ -275,7 +286,14 @@ export default function CloudValleyScreen() {
                   const avgDiff = diff / (frame.length / 16);
                   // Normalize avgDiff (0-255) to a motion variance value (e.g. 0.0 to 1.5)
                   const normalizedVariance = avgDiff / 15; // lower divisor = more sensitive to motion
-                  setMotionVariance(normalizedVariance);
+                  
+                  motionVarianceRef.current = normalizedVariance;
+                  
+                  const shaking = normalizedVariance > 0.12;
+                  if (shaking !== isShakingRef.current) {
+                    isShakingRef.current = shaking;
+                    setIsShaking(shaking);
+                  }
                 }
                 lastFrame = frame;
               } catch (e) {
@@ -451,7 +469,8 @@ export default function CloudValleyScreen() {
             if (hasMovedInCurrentStepRef.current) {
               stepsMovedCountRef.current += 1;
             }
-            endGame();
+            // Defer endGame to avoid setState during render
+            shouldEndGameRef.current = true;
             return 100;
           }
         }
@@ -461,6 +480,14 @@ export default function CloudValleyScreen() {
 
     return () => clearInterval(interval);
   }, [isPlaying]);
+
+  // Deferred endGame handler — runs outside the render phase
+  useEffect(() => {
+    if (shouldEndGameRef.current) {
+      shouldEndGameRef.current = false;
+      endGame();
+    }
+  }, [calmProgress]);
 
   const endGame = async () => {
     setIsPlaying(false);
@@ -656,6 +683,13 @@ export default function CloudValleyScreen() {
             <Path d="M8 5a2 2 0 0 1 8 0" strokeLinecap="round" />
           </Svg>
         );
+      case 'stretch_arms':
+        return (
+          <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <Circle cx="12" cy="6" r="3" />
+            <Path d="M12 9v7M5 12h14M9 20l3-4 3 4" />
+          </Svg>
+        );
       case 'balance':
         return (
           <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5">
@@ -773,17 +807,13 @@ export default function CloudValleyScreen() {
   const renderGetReadyScreen = () => (
     <View style={styles.readyContainer}>
       <View style={styles.cardsRowWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.cardsScrollContent}
-        >
+        <View style={styles.cardsRow}>
           <View style={styles.ruleCard}>
             <View style={[styles.cardBadge, { backgroundColor: '#4CAF50' }]}>
               <Text style={{ color: '#FFF', fontSize: f(13) }}>🌿</Text>
             </View>
             <View style={styles.ruleIconRoundBg}>
-              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+              <Svg width={isTablet ? s(54) : s(36)} height={isTablet ? s(54) : s(36)} viewBox="0 0 24 24" fill="none">
                 <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93.03-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 1.76-.56 3.39-1.5 4.73z" fill="#A5D6A7" />
                 <Path d="M6 14c0-2.5 3-4 6-4s6 1.5 6 4-2.5 3-6 3-6-1.5-6-3zm3 0c0 .8 1.3 1.5 3 1.5s3-.7 3-1.5-1.3-.8-3-.8-3 .3-3 .8z" fill="#4CAF50" />
               </Svg>
@@ -796,7 +826,7 @@ export default function CloudValleyScreen() {
               <Text style={{ color: '#FFF', fontSize: f(13) }}>🖐️</Text>
             </View>
             <View style={styles.ruleIconRoundBg}>
-              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+              <Svg width={isTablet ? s(54) : s(36)} height={isTablet ? s(54) : s(36)} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" fill="#FFE082" />
                 <Path d="M12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" fill="#FFB300" />
                 <Path d="M12 5l1.5 4.5L18 11l-4.5 1.5L12 17l-1.5-4.5L6 11l4.5-1.5z" fill="#FFF" />
@@ -810,7 +840,7 @@ export default function CloudValleyScreen() {
               <Text style={{ color: '#FFF', fontSize: f(13) }}>🐌</Text>
             </View>
             <View style={styles.ruleIconRoundBg}>
-              <Svg width={s(54)} height={s(54)} viewBox="0 0 24 24" fill="none">
+              <Svg width={isTablet ? s(54) : s(36)} height={isTablet ? s(54) : s(36)} viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" fill="#90CAF9" />
                 <Path d="M15 14h-6a3 3 0 0 0-3 3h12a3 3 0 0 0-3-3z" fill="#1565C0" />
                 <Path d="M8 14a3 3 0 1 1 6 0" fill="#1E88E5" />
@@ -819,7 +849,7 @@ export default function CloudValleyScreen() {
             </View>
             <Text style={styles.ruleCardLabel}>{t('cloudValley.moveSlowly')}</Text>
           </View>
-        </ScrollView>
+        </View>
       </View>
 
       <View style={styles.levelSelectorContainer}>
@@ -976,7 +1006,7 @@ export default function CloudValleyScreen() {
                       <View style={[styles.progressBarFill, { width: `${calmProgress}%` }]} />
                     </View>
                   </View>
-                  {motionVariance > 0.12 && isSensorAvailable && (
+                  {isShaking && isSensorAvailable && (
                     <View style={styles.alertShakeCard}>
                       <Text style={styles.alertShakeText}>⚠️ {t('cloudValley.holdStill')}</Text>
                     </View>
@@ -1470,22 +1500,23 @@ const styles = StyleSheet.create({
     paddingVertical: s(10),
   },
   cardsRowWrapper: {
-    height: s(155),
+    width: '100%',
     marginVertical: s(8),
   },
-  cardsScrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: s(10),
-    gap: s(14),
+  cardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: s(4),
   },
   ruleCard: {
-    width: isTablet ? s(190) : s(155),
+    width: isTablet ? s(190) : (SCREEN_WIDTH - s(48)) / 3,
     backgroundColor: '#FFFDF9',
-    borderRadius: s(24),
+    borderRadius: s(20),
     borderWidth: 3,
     borderColor: '#E6D7BD',
-    paddingVertical: s(14),
-    paddingHorizontal: s(12),
+    paddingVertical: s(12),
+    paddingHorizontal: s(6),
     alignItems: 'center',
     position: 'relative',
     shadowColor: '#8D6E63',
@@ -1496,7 +1527,9 @@ const styles = StyleSheet.create({
   },
   cardBadge: {
     position: 'absolute',
-    top: -s(12),
+    top: -s(13),
+    left: '50%',
+    marginLeft: -s(13),
     width: s(26),
     height: s(26),
     borderRadius: s(13),
@@ -1510,19 +1543,20 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   ruleIconRoundBg: {
-    width: s(70),
-    height: s(70),
-    borderRadius: s(35),
+    width: isTablet ? s(70) : s(48),
+    height: isTablet ? s(70) : s(48),
+    borderRadius: isTablet ? s(35) : s(24),
     backgroundColor: '#F9F4EA',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: s(8),
+    marginBottom: s(6),
   },
   ruleCardLabel: {
-    fontSize: f(14),
+    fontSize: isTablet ? f(14) : f(11),
     fontWeight: '900',
     color: '#5C4033',
     textAlign: 'center',
+    lineHeight: isTablet ? f(18) : f(14),
   },
   levelSelectorContainer: {
     width: '100%',
@@ -1547,22 +1581,34 @@ const styles = StyleSheet.create({
   },
   levelPillBtn: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFDF9',
     borderWidth: 2,
-    borderColor: '#ECE0CE',
+    borderColor: '#E6D7BD',
     borderRadius: s(16),
-    paddingVertical: s(8),
+    paddingVertical: s(10),
+    paddingHorizontal: s(2),
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#8D6E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   levelPillBtnActive: {
     backgroundColor: '#02B3C9',
-    borderColor: '#00838F',
+    borderColor: '#02B3C9',
+    shadowColor: '#02B3C9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
   },
   levelPillText: {
-    fontSize: f(13),
-    fontWeight: '800',
-    color: '#5C4033',
+    fontSize: isTablet ? f(13) : f(11),
+    fontWeight: '900',
+    color: '#7A5C4F',
+    textAlign: 'center',
   },
   levelPillTextActive: {
     color: '#FFF',
