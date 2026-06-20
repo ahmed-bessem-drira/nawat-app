@@ -74,32 +74,49 @@ const MOOD_MAP: Record<string, { label: string; moodIcon: any }> = {
 };
 
 // ── Mission data ───────────────────────────────────────────────────────
-const RECOMMENDED_MISSION = {
-  id: 'cloud-valley',
-  title: 'Cloud Valley',
-  description: 'Trace the calm path and help cross the clouds.',
-  image: require('../../assets/cloud_valley_preview.png'),
-  duration: '3 min',
-  tag: 'Recommended for calm days',
-  route: '/cloud-valley' as const,
-};
-
-const SECONDARY_MISSIONS = [
-  {
+const MISSIONS = {
+  'cloud-valley': {
+    id: 'cloud-valley',
+    title: 'Cloud Valley',
+    description: 'Trace the calm path and help cross the clouds.',
+    image: require('../../assets/cloud_valley_preview.png'),
+    duration: '3 min',
+    route: '/cloud-valley' as const,
+  },
+  'backpack-oasis': {
+    id: 'backpack-oasis',
+    title: 'Backpack Oasis',
+    description: 'Organize your backpack and find your oasis.',
+    image: require('../../assets/backpack_oasis _preview.png'),
+    duration: '4 min',
+    route: '/backpack-oasis' as const,
+  },
+  'noise-souk': {
     id: 'noise-souk',
     title: 'Noise Souk',
     description: 'Find quiet in a noisy place.',
     image: require('../../assets/noise_souk_preview.png'),
+    duration: '4 min',
     route: '/noise-souk' as const,
   },
-  {
-    id: 'gate-patience',
+  'gate-of-patience': {
+    id: 'gate-of-patience',
     title: 'Gate of\nPatience',
     description: 'Practice stop and go.',
     image: require('../../assets/gate_patience_preview.png'),
+    duration: '5 min',
     route: '/gate-of-patience' as const,
   },
-];
+};
+
+const MOOD_GAME_MAP: Record<string, { main: keyof typeof MISSIONS; secondary: (keyof typeof MISSIONS)[] }> = {
+  CALM: { main: 'cloud-valley', secondary: ['backpack-oasis', 'noise-souk'] },
+  HAPPY: { main: 'backpack-oasis', secondary: ['cloud-valley', 'noise-souk'] },
+  EXCITED: { main: 'gate-of-patience', secondary: ['cloud-valley', 'noise-souk'] },
+  TIRED: { main: 'cloud-valley', secondary: ['backpack-oasis', 'gate-of-patience'] },
+  SAD: { main: 'backpack-oasis', secondary: ['cloud-valley', 'noise-souk'] },
+  ANGRY: { main: 'gate-of-patience', secondary: ['cloud-valley', 'backpack-oasis'] },
+};
 
 // ── Responsive sizes ───────────────────────────────────────────────────
 const HP = 20;
@@ -122,9 +139,16 @@ export default function TodaysJourneyScreen() {
   const selectedExplorer = EXPLORERS.find((e) => e.id === selectedAvatarId) || EXPLORERS[0];
   const moodInfo = MOOD_MAP[selectedMoodId] || MOOD_MAP.CALM;
 
+  const moodGameData = MOOD_GAME_MAP[selectedMoodId] || MOOD_GAME_MAP.CALM;
+  const recommendedMission = {
+    ...MISSIONS[moodGameData.main],
+    tag: `Recommended for ${moodInfo.label} days`,
+  };
+  const secondaryMissions = moodGameData.secondary.map((id) => MISSIONS[id]);
+
   const handleStartMission = () => {
     router.push({
-      pathname: RECOMMENDED_MISSION.route,
+      pathname: recommendedMission.route,
       params: { selectedLanguage: params.selectedLanguage || 'ENGLISH', selectedAvatar: selectedAvatarId, selectedMood: selectedMoodId },
     });
   };
@@ -168,21 +192,21 @@ export default function TodaysJourneyScreen() {
           <View style={s.mainCard}>
             <View style={s.mainRow}>
               <View style={s.mainImgWrap}>
-                <Image source={RECOMMENDED_MISSION.image} style={s.mainImg} resizeMode="cover" />
+                <Image source={recommendedMission.image} style={s.mainImg} resizeMode="cover" />
               </View>
               <View style={s.mainInfo}>
                 <View style={s.mainTitleRow}>
                   <Image source={moodInfo.moodIcon} style={s.moodIcon} resizeMode="contain" />
-                  <Text style={s.mainTitle}>{RECOMMENDED_MISSION.title}</Text>
+                  <Text style={s.mainTitle}>{recommendedMission.title}</Text>
                 </View>
-                <Text style={s.mainDesc}>{RECOMMENDED_MISSION.description}</Text>
+                <Text style={s.mainDesc}>{recommendedMission.description}</Text>
                 <View style={s.tagPill}>
                   <CheckCircleIcon />
-                  <Text style={s.tagTxt}>{RECOMMENDED_MISSION.tag}</Text>
+                  <Text style={s.tagTxt}>{recommendedMission.tag}</Text>
                 </View>
                 <View style={s.durRow}>
                   <ClockIcon />
-                  <Text style={s.durTxt}>{RECOMMENDED_MISSION.duration}</Text>
+                  <Text style={s.durTxt}>{recommendedMission.duration}</Text>
                 </View>
               </View>
             </View>
@@ -192,7 +216,7 @@ export default function TodaysJourneyScreen() {
           <View style={s.alsoSection}>
             <Text style={s.alsoLabel}>— Also ready later —</Text>
             <View style={s.secRow}>
-              {SECONDARY_MISSIONS.map((m) => (
+              {secondaryMissions.map((m) => (
                 <TouchableOpacity
                   key={m.id}
                   style={s.secCard}

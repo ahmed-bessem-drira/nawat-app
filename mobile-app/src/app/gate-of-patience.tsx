@@ -396,36 +396,36 @@ export default function GateOfPatienceScreen() {
           </View>
 
           <View style={s.introBody}>
-            {/* Title Area */}
-            <View style={s.titleWrap}>
-              <Image source={require('../../assets/gate_patience_title.png')} style={s.titleImg} resizeMode="contain" />
-              <Text style={s.subtitleText}>Wait, watch, then tap</Text>
-            </View>
+            <View style={s.introTopSection}>
+              {/* Title Area */}
+              <View style={s.titleWrap}>
+                <Image source={require('../../assets/gate_patience_title.png')} style={s.titleImg} resizeMode="contain" />
+                <Text style={s.subtitleText}>Wait, watch, then tap</Text>
+              </View>
 
-            {/* Instruction Card */}
-            <View style={s.introCard}>
-              <View style={s.introRow}>
-                <LeafIcon />
-                <View style={s.introTextWrap}>
-                  <Text style={s.introMainText}>
-                    Tap <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>green</Text>. Wait on <Text style={{ color: '#F44336', fontWeight: 'bold' }}>red</Text>.
-                  </Text>
-                  <Text style={s.introSubText}>Pause, then tap on <Text style={{ color: '#F57F17', fontWeight: 'bold' }}>yellow</Text>.</Text>
+              {/* Instruction Card */}
+              <View style={s.introCard}>
+                <View style={s.introRow}>
+                  <LeafIcon />
+                  <View style={s.introTextWrap}>
+                    <Text style={s.introMainText}>
+                      Tap <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>green</Text>. Wait on <Text style={{ color: '#F44336', fontWeight: 'bold' }}>red</Text>.
+                    </Text>
+                    <Text style={s.introSubText}>Pause, then tap on <Text style={{ color: '#F57F17', fontWeight: 'bold' }}>yellow</Text>.</Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* Pills */}
-            <View style={s.pillsRow}>
-              <View style={s.pill}><ClockIcon /><Text style={s.pillText}>Time: 2 min</Text></View>
-              <View style={s.pill}><GamepadIcon /><Text style={s.pillText}>Patience game</Text></View>
+              {/* Pills */}
+              <View style={s.pillsRow}>
+                <View style={s.pill}><ClockIcon /><Text style={s.pillText}>Time: 2 min</Text></View>
+                <View style={s.pill}><GamepadIcon /><Text style={s.pillText}>Patience game</Text></View>
+              </View>
             </View>
 
             {/* Preview Graphics */}
             <View style={s.previewArea}>
               <Image source={selectedExplorer.image} style={s.explorerImage} resizeMode="contain" />
-              <Image source={require('../../assets/gate_door_image.png')} style={s.gateImage} resizeMode="contain" />
-
               <View style={s.nodePreviewsRow}>
                 <View style={s.nodePreviewItem}>
                   <GreenNodeSvg />
@@ -450,9 +450,6 @@ export default function GateOfPatienceScreen() {
               </View>
 
               <View style={s.actionsRow}>
-                <TouchableOpacity style={s.btnPractice} activeOpacity={0.8}>
-                  <BookIcon /><Text style={s.btnPracticeText}>Practice</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={s.btnStart} activeOpacity={0.8} onPress={handleStartGame}>
                   <Text style={s.btnStartText}>Start Game</Text><ArrowRightIcon />
                 </TouchableOpacity>
@@ -683,8 +680,9 @@ const s = StyleSheet.create({
 
   // INTRO
   introBody: { flex: 1, paddingHorizontal: HP, justifyContent: 'space-evenly', alignItems: 'center' },
-  titleWrap: { alignItems: 'center' },
-  titleImg: { width: SW * 0.95, height: SH * 0.27, marginTop: -20, marginBottom: -25 },
+  introTopSection: { width: '100%', alignItems: 'center', gap: 6 },
+  titleWrap: { alignItems: 'center', width: '100%', overflow: 'visible' },
+  titleImg: { width: SW * 0.95, height: SH * 0.27, marginTop: -80, marginBottom: -25 },
   introCard: { backgroundColor: '#FFFDF0', borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: '#F5E6CA', width: '100%', alignItems: 'center' },
   introRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   introTextWrap: { flex: 1 },
@@ -695,12 +693,11 @@ const s = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   pillText: { fontSize: 12, fontWeight: '700', color: '#455A64' },
 
-  previewArea: { width: '100%', height: SH * 0.35, position: 'relative', alignItems: 'center', justifyContent: 'flex-end' },
-  gateImage: { width: SW * 0.5, height: SH * 0.25, position: 'absolute', top: 0, zIndex: 0 },
-  explorerImage: { width: SW * 0.4, height: SH * 0.22, position: 'absolute', left: -20, bottom: 20, zIndex: 2 },
+  previewArea: { width: '100%', height: SH * 0.29, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 5 },
+  explorerImage: { width: SW * 0.42, height: SH * 0.25 },
 
-  nodePreviewsRow: { flexDirection: 'row', justifyContent: 'flex-end', width: '100%', paddingLeft: SW * 0.3, zIndex: 3, paddingBottom: 10 },
-  nodePreviewItem: { alignItems: 'center', marginHorizontal: -5 },
+  nodePreviewsRow: { flexDirection: 'row', justifyContent: 'space-around', flex: 1, gap: 4 },
+  nodePreviewItem: { alignItems: 'center' },
   nodeLabel: { backgroundColor: '#FFF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginTop: 4, borderWidth: 1, borderColor: '#E0E0E0' },
   nodeLabelText: { fontSize: 8, fontWeight: '800', color: '#5D4037' },
 
@@ -710,7 +707,7 @@ const s = StyleSheet.create({
   actionsRow: { flexDirection: 'row', gap: 10, width: '100%' },
   btnPractice: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E0F2F1', paddingVertical: 14, borderRadius: 25, gap: 8, borderWidth: 1.5, borderColor: '#B2DFDB' },
   btnPracticeText: { fontSize: 16, fontWeight: '700', color: '#00796B' },
-  btnStart: { flex: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00ACC1', paddingVertical: 14, borderRadius: 25, gap: 8 },
+  btnStart: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00ACC1', paddingVertical: 14, borderRadius: 25, gap: 8 },
   btnStartText: { fontSize: 18, fontWeight: '800', color: '#FFF' },
 
   // GAMEPLAY
