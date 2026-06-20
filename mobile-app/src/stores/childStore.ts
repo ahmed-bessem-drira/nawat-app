@@ -7,6 +7,7 @@ interface Child {
   nickname: string;
   avatar: string;
   language: string;
+  uniqueCode?: string;
   createdAt: string;
 }
 

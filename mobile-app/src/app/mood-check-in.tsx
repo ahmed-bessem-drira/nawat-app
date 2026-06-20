@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { syncService } from '@/services/sync.service';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path, Circle } from 'react-native-svg';
 
@@ -100,6 +101,7 @@ export default function MoodCheckInScreen() {
           id: Date.now().toString(), child_id: child.id, mood: selectedMood,
           synced: 0, created_at: Date.now(),
         });
+        syncService.syncData().catch(() => {});
       } catch (error) { console.error('Error saving mood:', error); }
     }
     router.push({
@@ -122,7 +124,13 @@ export default function MoodCheckInScreen() {
       <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
         {/* Top nav */}
         <View style={s.topNav}>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
+          <TouchableOpacity style={s.backBtn} onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
+          }} activeOpacity={0.8}>
             <BackArrowIcon />
           </TouchableOpacity>
           <View style={s.dots}>

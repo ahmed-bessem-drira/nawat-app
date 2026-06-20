@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { syncService } from '@/services/sync.service';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -368,6 +369,8 @@ export default function GateOfPatienceScreen() {
       } catch (e) {
         console.error('Error saving metrics', e);
       }
+
+      syncService.syncData().catch(() => {});
     }
   };
 
