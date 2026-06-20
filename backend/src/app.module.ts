@@ -8,6 +8,8 @@ import { SessionsModule } from './sessions/sessions.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { AiModule } from './ai/ai.module';
 import { SyncModule } from './sync/sync.module';
+import { MongodbModule } from './mongodb/mongodb.module';
+import { ParentsModule } from './mongodb/parents.module';
 
 @Module({
   imports: [
@@ -21,12 +23,14 @@ import { SyncModule } from './sync/sync.module';
       },
     }),
     PrismaModule,
+    MongodbModule,
     AuthModule,
     ChildrenModule,
     SessionsModule,
     RecommendationsModule,
     AiModule,
     SyncModule,
+    ParentsModule,
   ],
 })
 export class AppModule {}

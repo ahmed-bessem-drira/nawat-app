@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { syncService } from '@/services/sync.service';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -250,9 +251,12 @@ export default function BackpackOasisScreen() {
     setScreen('RESULTS');
 
     const correctCount = slots.filter((slot, idx) => slot?.order === idx + 1).length;
+    const accuracy = Math.max(0, Math.min(100, Math.round((correctCount / Math.max(1, correctCount + attempts)) * 100)));
+
     const metrics = {
       correctSequence: correctCount,
       completionTime: duration,
+      accuracy,
       attempts,
       wrongPicks,
     };
@@ -278,6 +282,7 @@ export default function BackpackOasisScreen() {
           game_type: 'BACKPACK_OASIS',
           correct_sequence: correctCount,
           completion_time: duration,
+          accuracy,
           attempts,
           wrong_picks: wrongPicks,
           synced: 0,
@@ -293,6 +298,8 @@ export default function BackpackOasisScreen() {
       } catch (e) {
         console.error('Error saving metrics', e);
       }
+
+      syncService.syncData().catch(() => {});
     }
   };
 

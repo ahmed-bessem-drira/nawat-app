@@ -18,6 +18,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { syncService } from '@/services/sync.service';
 import { getTranslation } from '@/i18n/translations';
 import { Language } from '../shared/types';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
@@ -564,6 +565,8 @@ export default function CloudValleyScreen() {
       } catch (e) {
         console.error('Failed to save metrics:', e);
       }
+
+      syncService.syncData().catch(() => {});
     }
   };
 

@@ -39,9 +39,27 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
-  console.log(`🚀 NAWAT FOCUS Backend running on http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+
+  await app.init();
+  const server = app.getHttpServer();
+
+  function tryListen(retries = 3) {
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 NAWAT FOCUS Backend running on http://0.0.0.0:${port}`);
+      console.log(`📚 API Documentation: http://0.0.0.0:${port}/api/docs`);
+    });
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE' && retries > 0) {
+        console.log(`Port ${port} busy, retrying in 10s...`);
+        server.close();
+        setTimeout(() => tryListen(retries - 1), 10000);
+      } else {
+        console.error('Failed to start server:', err.message);
+      }
+    });
+  }
+
+  tryListen();
 }
 
 bootstrap();

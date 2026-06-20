@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS child (
   nickname TEXT NOT NULL,
   avatar TEXT NOT NULL,
   language TEXT NOT NULL,
+  unique_code TEXT,
   created_at INTEGER NOT NULL
 );
 

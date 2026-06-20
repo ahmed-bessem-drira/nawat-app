@@ -4,7 +4,9 @@ import { useRouter } from 'expo-router';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
 import { databaseService } from '@/services/database.service';
+import { syncService } from '@/services/sync.service';
 import { getTranslation } from '@/i18n/translations';
+import { Language } from '../../../shared/types';
 import * as Haptics from 'expo-haptics';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -70,13 +72,28 @@ export default function NoiseSoukScreen() {
   const commissionsRef = useRef(commissions);
   const reactionTimesRef = useRef(reactionTimes);
   const comboRef = useRef(combo);
-  scoreRef.current = score;
-  omissionsRef.current = omissions;
-  commissionsRef.current = commissions;
-  reactionTimesRef.current = reactionTimes;
-  comboRef.current = combo;
+  const correctHitsRef = useRef(correctHits);
 
-  const t = useCallback((key: string) => getTranslation(lang, key), [lang]);
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+  useEffect(() => {
+    omissionsRef.current = omissions;
+  }, [omissions]);
+  useEffect(() => {
+    commissionsRef.current = commissions;
+  }, [commissions]);
+  useEffect(() => {
+    reactionTimesRef.current = reactionTimes;
+  }, [reactionTimes]);
+  useEffect(() => {
+    comboRef.current = combo;
+  }, [combo]);
+  useEffect(() => {
+    correctHitsRef.current = correctHits;
+  }, [correctHits]);
+
+  const t = useCallback((key: string) => getTranslation(lang as Language, key), [lang]);
 
   const cleanup = useCallback(() => {
     if (spawnIntervalRef.current) clearInterval(spawnIntervalRef.current);
@@ -240,12 +257,15 @@ export default function NoiseSoukScreen() {
     const finalOmissions = omissionsRef.current;
     const finalCommissions = commissionsRef.current;
     const finalScore = scoreRef.current;
+    const finalCorrectHits = correctHitsRef.current;
+    const accuracy = Math.max(0, Math.min(100, Math.round((finalCorrectHits / Math.max(1, finalCorrectHits + finalOmissions + finalCommissions)) * 100)));
 
     const metrics = {
       omissions: finalOmissions,
       commissions: finalCommissions,
       reactionTime: avgReactionTime,
       reactionTimeVariability,
+      accuracy,
     };
 
     endSession(metrics);
@@ -270,6 +290,7 @@ export default function NoiseSoukScreen() {
         commissions: finalCommissions,
         reaction_time: avgReactionTime,
         reaction_time_variability: reactionTimeVariability,
+        accuracy: accuracy,
         synced: 0,
         created_at: Date.now(),
       });
@@ -277,9 +298,13 @@ export default function NoiseSoukScreen() {
       if (finalScore > 50) rewards.addWaterDrop();
       if (finalScore > 100) rewards.addFlower();
     }
+
+    syncService.syncData().catch(() => {});
   }, [child]);
 
-  endGameRef.current = endGame;
+  useEffect(() => {
+    endGameRef.current = endGame;
+  }, [endGame]);
 
   const handleBack = () => {
     isActiveRef.current = false;
