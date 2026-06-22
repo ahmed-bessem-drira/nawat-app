@@ -120,6 +120,12 @@ const getLanguageEnum = (dbLang: string | null | undefined): Language => {
   return Language.ENGLISH;
 };
 
+const ArrowRightIcon = () => (
+  <Svg width={s(18)} height={s(18)} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M5 12h14M12 5l7 7-7 7" />
+  </Svg>
+);
+
 export default function CloudValleyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ selectedLanguage?: string; selectedAvatar?: string }>();
@@ -725,7 +731,22 @@ export default function CloudValleyScreen() {
 
   // ===== SCREENS =====
   const renderPermissionScreen = () => (
-    <View style={styles.cardContainer}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.introScrollContent}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      {/* Title Section */}
+      <View style={styles.introTitleWrap}>
+        <Image
+          source={require('../../assets/cloude_valley_title.png')}
+          style={styles.introTitleImg}
+          resizeMode="contain"
+        />
+        <Text style={styles.introSubtitle}>{t('cloudValley.description')}</Text>
+      </View>
+
       <View style={styles.shieldCard}>
         <View style={styles.shieldBadge}>
           <Svg width={s(32)} height={s(32)} viewBox="0 0 24 24" fill="none">
@@ -808,18 +829,30 @@ export default function CloudValleyScreen() {
             }
           }}
         >
-          <Svg width={s(20)} height={s(20)} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" style={{ marginRight: s(8) }}>
-            <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-            <Circle cx="12" cy="13" r="4" />
-          </Svg>
-          <Text style={styles.btnUseCameraText}>{t('cloudValley.useCamera')} ✨</Text>
+          <Text style={styles.btnUseCameraText}>{t('cloudValley.useCamera')} </Text>
+          <ArrowRightIcon />
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderGetReadyScreen = () => (
-    <View style={styles.readyContainer}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.introScrollContent}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      {/* Title Section */}
+      <View style={styles.introTitleWrap}>
+        <Image
+          source={require('../../assets/cloude_valley_title.png')}
+          style={styles.introTitleImg}
+          resizeMode="contain"
+        />
+        <Text style={styles.introSubtitle}>{t('cloudValley.description')}</Text>
+      </View>
+
       <View style={styles.cardsRowWrapper}>
         <View style={styles.cardsRow}>
           <View style={styles.ruleCard}>
@@ -918,9 +951,10 @@ export default function CloudValleyScreen() {
         activeOpacity={0.9}
         onPress={handleStartGame}
       >
-        <Text style={styles.btnStartCalmMovesText}>{t('cloudValley.startCalmMoves')} ➔</Text>
+        <Text style={styles.btnStartCalmMovesText}>{t('cloudValley.startCalmMoves')} </Text>
+        <ArrowRightIcon />
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 
   const renderGameplayScreen = () => {
@@ -1127,6 +1161,12 @@ export default function CloudValleyScreen() {
     return { posturalText, inhibitoryText, syncText, participationText };
   };
 
+  const getSimpleLabel = (score: number) => {
+    if (score >= 80) return 'Great! 🌟';
+    if (score >= 50) return 'Good! 👍';
+    return 'Nice! ✨';
+  };
+
   const renderResultsScreen = () => (
     <ScrollView
       style={styles.resultsScroll}
@@ -1161,7 +1201,7 @@ export default function CloudValleyScreen() {
             <Text style={{ fontSize: f(22) }}>☁️</Text>
           </View>
           <Text style={styles.feedbackCardLabel}>{t('cloudValley.smoothMoves')}</Text>
-          <Text style={styles.feedbackCardValue}>{smoothMovesScore}%</Text>
+          <Text style={styles.feedbackCardValue}>{getSimpleLabel(smoothMovesScore)}</Text>
         </View>
 
         <View style={styles.feedbackCardItem}>
@@ -1169,7 +1209,7 @@ export default function CloudValleyScreen() {
             <Text style={{ fontSize: f(22) }}>🌿</Text>
           </View>
           <Text style={styles.feedbackCardLabel}>{t('cloudValley.goodFocus')}</Text>
-          <Text style={styles.feedbackCardValue}>{goodFocusScore}%</Text>
+          <Text style={styles.feedbackCardValue}>{getSimpleLabel(goodFocusScore)}</Text>
         </View>
 
         <View style={styles.feedbackCardItem}>
@@ -1177,63 +1217,20 @@ export default function CloudValleyScreen() {
             <Text style={{ fontSize: f(22) }}>💜</Text>
           </View>
           <Text style={styles.feedbackCardLabel}>{t('cloudValley.calmMoments')}</Text>
-          <Text style={styles.feedbackCardValue}>{calmMomentsScore}%</Text>
+          <Text style={styles.feedbackCardValue}>{getSimpleLabel(calmMomentsScore)}</Text>
         </View>
       </View>
 
-      <View style={styles.insightsCard}>
-        <Text style={styles.insightsTitle}>{t('cloudValley.evaluationTitle')}</Text>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightEmoji}>🏃</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.insightText}>
-              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.activeParticipation')} ({activeParticipationScore}%): </Text>
-              {getADHDFeedback().participationText}
-            </Text>
-          </View>
+      <View style={styles.rewardCard}>
+        <View style={styles.rewardCardIconBg}>
+          <Text style={{ fontSize: f(36) }}>{finalCalmScore >= activeLevelConfig.targetScore ? '🌸' : '💧'}</Text>
         </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightEmoji}>🧘</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.insightText}>
-              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.posturalControl')} ({smoothMovesScore}%): </Text>
-              {getADHDFeedback().posturalText}
-            </Text>
-          </View>
+        <View style={styles.rewardCardTextWrapper}>
+          <Text style={styles.rewardCardTitle}>
+            {finalCalmScore >= activeLevelConfig.targetScore ? 'You earned a flower!' : 'You earned a water drop!'}
+          </Text>
+          <Text style={styles.rewardCardDesc}>Your Focus Garden is growing!</Text>
         </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightEmoji}>🎯</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.insightText}>
-              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.inhibitoryControl')} ({goodFocusScore}%): </Text>
-              {getADHDFeedback().inhibitoryText}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightEmoji}>🌬️</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.insightText}>
-              <Text style={{ fontWeight: '900', color: '#00796B' }}>{t('cloudValley.breathingSync')} ({calmMomentsScore}%): </Text>
-              {getADHDFeedback().syncText}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.awardBannerCard}>
-        <View style={styles.awardIconBadge}>
-          <Svg width={s(28)} height={s(28)} viewBox="0 0 24 24" fill="none">
-            <Circle cx="12" cy="12" r="5" fill="#E91E63" />
-            <Circle cx="12" cy="6" r="3.5" fill="#9C27B0" opacity="0.8" />
-            <Circle cx="12" cy="18" r="3.5" fill="#9C27B0" opacity="0.8" />
-            <Circle cx="6" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
-            <Circle cx="18" cy="12" r="3.5" fill="#9C27B0" opacity="0.8" />
-          </Svg>
-        </View>
-        <Text style={styles.awardCardText}>
-          {finalCalmScore >= activeLevelConfig.targetScore ? t('cloudValley.earnedFlower') : t('cloudValley.earnedWaterDrop')}
-        </Text>
       </View>
 
       <View style={styles.resultsButtonsWrapper}>
@@ -1242,7 +1239,8 @@ export default function CloudValleyScreen() {
           activeOpacity={0.9}
           onPress={handleBack}
         >
-          <Text style={styles.btnNextAdventureText}>{t('cloudValley.nextAdventure')} ➔</Text>
+          <Text style={styles.btnNextAdventureText}>{t('cloudValley.nextAdventure')} </Text>
+          <ArrowRightIcon />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1258,7 +1256,7 @@ export default function CloudValleyScreen() {
 
   return (
     <ImageBackground
-      source={require('../../assets/nawat_background.png')}
+      source={require('../../assets/cloud_valley_background.png')}
       style={styles.backgroundImage}
       resizeMode="cover"
     >
@@ -1273,17 +1271,19 @@ export default function CloudValleyScreen() {
             </Svg>
           </TouchableOpacity>
 
-          <View style={styles.headerTitleBox}>
-            <View style={styles.headerTitleIconBg}>
-              <Text style={{ fontSize: f(15) }}>😴</Text>
+          {screen === 'GAMEPLAY' && (
+            <View style={styles.headerTitleBox}>
+              <View style={styles.headerTitleIconBg}>
+                <Text style={{ fontSize: f(15) }}>😴</Text>
+              </View>
+              <View>
+                <Text style={styles.headerMainTitle}>{t('cloudValley.title')}</Text>
+                <Text style={styles.headerSubTitle}>
+                  {t('cloudValley.description')}
+                </Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.headerMainTitle}>{t('cloudValley.title')}</Text>
-              <Text style={styles.headerSubTitle}>
-                {screen === 'GET_READY' ? t('cloudValley.getReady') : t('cloudValley.description')}
-              </Text>
-            </View>
-          </View>
+          )}
 
           <View style={styles.headerRightControlsRow}>
             <TouchableOpacity
@@ -1324,15 +1324,15 @@ const styles = StyleSheet.create({
   safeAreaContainer: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingTop: Platform.OS === 'web' ? 48 : s(12),
+    paddingTop: Platform.OS === 'web' ? s(10) : 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: s(16),
-    paddingTop: s(18),
-    paddingBottom: s(10),
+    paddingTop: s(6),
+    paddingBottom: s(6),
     zIndex: 10,
   },
   headerCircledButton: {
@@ -1408,15 +1408,15 @@ const styles = StyleSheet.create({
     borderWidth: 3.5,
     borderColor: '#E6D7BD',
     paddingHorizontal: s(20),
-    paddingTop: s(36),
-    paddingBottom: s(24),
+    paddingTop: s(28),
+    paddingBottom: s(16),
     position: 'relative',
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 5,
-    marginBottom: s(8),
+    marginBottom: s(6),
   },
   shieldBadge: {
     position: 'absolute',
@@ -1449,7 +1449,7 @@ const styles = StyleSheet.create({
   pointRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: s(16),
+    marginBottom: s(10),
   },
   circleIconBg: {
     width: s(42),
@@ -1476,10 +1476,10 @@ const styles = StyleSheet.create({
     marginVertical: s(8),
   },
   permissionMascot: {
-    width: SCREEN_WIDTH * 0.35,
-    height: SCREEN_WIDTH * 0.4,
-    maxWidth: s(150),
-    maxHeight: s(170),
+    width: SCREEN_WIDTH * 0.24,
+    height: SCREEN_WIDTH * 0.28,
+    maxWidth: s(100),
+    maxHeight: s(120),
   },
   permissionButtonsWrapper: {
     width: '100%',
@@ -1488,24 +1488,25 @@ const styles = StyleSheet.create({
   },
   btnUseCamera: {
     backgroundColor: '#02B3C9',
-    borderRadius: s(32),
+    borderRadius: s(25),
     borderWidth: 2,
     borderColor: '#00838F',
     flexDirection: 'row',
-    paddingVertical: s(16),
+    paddingVertical: s(14),
     paddingHorizontal: s(24),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#00838F',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 5,
     elevation: 4,
+    gap: s(8),
   },
   btnUseCameraText: {
     color: '#FFFFFF',
-    fontSize: f(22),
-    fontWeight: '900',
+    fontSize: f(18),
+    fontWeight: '800',
   },
   readyContainer: {
     flex: 1,
@@ -1641,10 +1642,10 @@ const styles = StyleSheet.create({
     marginVertical: s(8),
   },
   mascotReady: {
-    width: SCREEN_WIDTH * 0.3,
-    height: SCREEN_WIDTH * 0.35,
-    maxWidth: s(130),
-    maxHeight: s(150),
+    width: SCREEN_WIDTH * 0.22,
+    height: SCREEN_WIDTH * 0.26,
+    maxWidth: s(95),
+    maxHeight: s(115),
   },
   woodSignpost: {
     alignItems: 'center',
@@ -1676,24 +1677,26 @@ const styles = StyleSheet.create({
   },
   btnStartCalmMoves: {
     backgroundColor: '#02B3C9',
-    borderRadius: s(32),
+    borderRadius: s(25),
     borderWidth: 2,
     borderColor: '#00838F',
     width: '100%',
-    paddingVertical: s(16),
+    paddingVertical: s(14),
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#00838F',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 5,
     elevation: 4,
     marginBottom: s(10),
+    gap: s(8),
   },
   btnStartCalmMovesText: {
     color: '#FFFFFF',
-    fontSize: f(22),
-    fontWeight: '900',
+    fontSize: f(18),
+    fontWeight: '800',
   },
   playContainer: {
     flex: 1,
@@ -2043,27 +2046,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDF4',
     borderWidth: 3.5,
     borderColor: '#ECE0CE',
-    borderRadius: s(28),
-    padding: s(16),
+    borderRadius: s(32),
+    padding: s(24),
     alignItems: 'center',
-    width: '45%',
-    maxWidth: 200,
+    width: '55%',
+    maxWidth: 240,
     shadowColor: '#8D6E63',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 4,
   },
   scoreBadgeLabel: {
-    fontSize: f(13),
+    fontSize: f(16),
     fontWeight: '800',
-    color: '#00796B',
+    color: '#7A5C4F',
+    marginBottom: s(4),
   },
   scoreBadgeNumber: {
-    fontSize: f(48),
+    fontSize: f(58),
     fontWeight: '900',
-    color: '#009688',
-    marginVertical: s(2),
+    color: '#00796B',
+    marginVertical: s(4),
+    lineHeight: f(64),
   },
   scoreStarsRow: {
     flexDirection: 'row',
@@ -2106,30 +2111,55 @@ const styles = StyleSheet.create({
     marginBottom: s(2),
   },
   feedbackCardValue: {
-    fontSize: f(15),
+    fontSize: f(13),
     fontWeight: '900',
     color: '#00796B',
+    textAlign: 'center',
   },
-  awardBannerCard: {
-    backgroundColor: '#FFFDE7',
-    borderWidth: 2,
-    borderColor: '#F0E4CE',
+  rewardCard: {
+    backgroundColor: '#E0F7FA',
+    borderWidth: 2.5,
+    borderColor: '#B2EBF2',
     borderRadius: s(24),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: s(10),
-    paddingHorizontal: s(16),
+    paddingVertical: s(16),
+    paddingHorizontal: s(20),
     width: '100%',
-    marginBottom: s(12),
+    marginBottom: s(20),
+    shadowColor: '#00838F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  awardIconBadge: {
-    marginRight: s(10),
+  rewardCardIconBg: {
+    width: s(54),
+    height: s(54),
+    borderRadius: s(27),
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: s(16),
+    shadowColor: '#00838F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  awardCardText: {
-    color: '#5C4033',
-    fontSize: f(15),
-    fontWeight: '900',
+  rewardCardTextWrapper: {
     flex: 1,
+  },
+  rewardCardTitle: {
+    color: '#006064',
+    fontSize: f(17),
+    fontWeight: '900',
+    marginBottom: s(2),
+  },
+  rewardCardDesc: {
+    color: '#00838F',
+    fontSize: f(13),
+    fontWeight: '700',
   },
   resultsButtonsWrapper: {
     width: '100%',
@@ -2137,7 +2167,7 @@ const styles = StyleSheet.create({
   },
   btnNextAdventure: {
     backgroundColor: '#02B3C9',
-    borderRadius: s(32),
+    borderRadius: s(25),
     borderWidth: 2,
     borderColor: '#00838F',
     width: '100%',
@@ -2149,15 +2179,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 4,
+    flexDirection: 'row',
+    gap: s(8),
   },
   btnNextAdventureText: {
     color: '#FFFFFF',
-    fontSize: f(20),
-    fontWeight: '900',
+    fontSize: f(18),
+    fontWeight: '800',
   },
   btnPlayAgainResult: {
     backgroundColor: '#FFFFFF',
-    borderRadius: s(32),
+    borderRadius: s(25),
     borderWidth: 2.5,
     borderColor: '#ECE0CE',
     width: '100%',
@@ -2173,43 +2205,32 @@ const styles = StyleSheet.create({
   btnPlayAgainResultText: {
     color: '#5C4033',
     fontSize: f(16),
-    fontWeight: '900',
+    fontWeight: '800',
   },
-  insightsCard: {
+  introScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: s(16),
+    paddingTop: s(10),
+    paddingBottom: s(45),
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  introTitleWrap: {
+    alignItems: 'center',
+    marginTop: s(5),
+    marginBottom: s(32),
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: s(24),
-    borderWidth: 2.5,
-    borderColor: '#ECE0CE',
-    padding: s(18),
-    marginVertical: s(10),
-    shadowColor: '#8D6E63',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  insightsTitle: {
-    fontSize: f(16),
-    fontWeight: '900',
-    color: '#00796B',
-    marginBottom: s(12),
-    textAlign: 'center',
+  introTitleImg: {
+    width: SCREEN_WIDTH * 0.98,
+    height: s(160),
+    marginVertical: s(4),
   },
-  insightRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: s(10),
-    gap: s(10),
-  },
-  insightEmoji: {
-    fontSize: f(20),
-    marginTop: s(1),
-  },
-  insightText: {
-    fontSize: f(12),
-    color: '#5C4033',
+  introSubtitle: {
+    fontSize: f(15),
     fontWeight: '700',
-    lineHeight: f(16),
+    color: '#37474F',
+    textAlign: 'center',
+    marginTop: s(2),
   },
 });

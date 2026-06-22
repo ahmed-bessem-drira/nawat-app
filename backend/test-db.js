@@ -2,8 +2,13 @@ const mongoose = require('mongoose');
 
 async function test() {
   try {
-    await mongoose.connect('mongodb+srv://bessemdrirabwork:WfUWeVlW3lW3Z76E@cluster0.a8mct.mongodb.net/nawat_focus?retryWrites=true&w=majority', { family: 4 });
+    // Try the vs947ch cluster first
+    const uri = 'mongodb+srv://ahmedddrira2_db_user:ahmedetyessine@cluster0.vs947ch.mongodb.net/nawat-parents?retryWrites=true&w=majority';
+    console.log('Connecting to:', uri);
+    await mongoose.connect(uri, { family: 4 });
     console.log('Connected to DB');
+
+    const db = mongoose.connection.db;
 
     const allGameData = await db.collection('gamedatas').find({}).sort({createdAt: -1}).limit(5).toArray();
     console.log('Recent game data in DB:', allGameData.length);
@@ -13,10 +18,11 @@ async function test() {
     console.log('Children in DB:');
     console.log(JSON.stringify(children, null, 2));
     
-    mongoose.disconnect();
+    await mongoose.disconnect();
   } catch (err) {
     console.error('Error:', err);
   }
 }
 
 test();
+
