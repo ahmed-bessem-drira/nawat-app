@@ -60,20 +60,10 @@ export class SyncService {
   }
 
   async getChildGameData(childId: string) {
-    const mongoose = require('mongoose');
-    const objectId = new mongoose.Types.ObjectId(childId);
-
-    // First, find the child to get any legacy gameData IDs
-    const child = await this.childModel.findById(objectId);
-    const legacyGameDataIds = child?.['gameData'] || [];
+    const objectId = new Types.ObjectId(childId);
 
     const gameData = await this.gameDataModel
-      .find({
-        $or: [
-          { childId: objectId },
-          { _id: { $in: legacyGameDataIds } }
-        ]
-      })
+      .find({ childId: objectId })
       .sort({ createdAt: -1 })
       .limit(50);
 
@@ -99,8 +89,7 @@ export class SyncService {
   }
 
   async getChildMoodEntries(childId: string) {
-    const mongoose = require('mongoose');
-    const objectId = new mongoose.Types.ObjectId(childId);
+    const objectId = new Types.ObjectId(childId);
     const moodEntries = await this.moodEntryModel
       .find({ childId: objectId })
       .sort({ createdAt: -1 })
@@ -114,8 +103,7 @@ export class SyncService {
   }
 
   async getChildRecommendations(childId: string) {
-    const mongoose = require('mongoose');
-    const objectId = new mongoose.Types.ObjectId(childId);
+    const objectId = new Types.ObjectId(childId);
     const gameData = await this.gameDataModel.find({ childId: objectId }).sort({ createdAt: -1 }).limit(20);
     const moodEntries = await this.moodEntryModel.find({ childId: objectId }).sort({ createdAt: -1 }).limit(10);
 
@@ -169,10 +157,9 @@ export class SyncService {
   }
 
   async getChildAnalytics(childId: string) {
-    const mongoose = require('mongoose');
-    const objectId = new mongoose.Types.ObjectId(childId);
+    const objectId = new Types.ObjectId(childId);
 
-    const child = await this.childModel.findById(objectId);
+    const child = await this.childModel.findById(objectId).lean();
     const legacyGameDataIds = child?.['gameData'] || [];
 
     const gameData = await this.gameDataModel.find({

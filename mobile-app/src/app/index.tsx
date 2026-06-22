@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, G, LinearGradient, Stop, Defs, Rect } from 'react-native-svg';
 import axios from 'axios';
 import { API_URL } from '@/config/env';
+import CodeInputModal from '@/components/CodeInputModal';
 
 const { width } = Dimensions.get('window');
 
@@ -72,9 +73,44 @@ export default function IndexScreen() {
   const { child, setChild } = useChildStore();
   const [selectedLang, setSelectedLang] = useState<string>('ENGLISH');
   const [showCodeModal, setShowCodeModal] = useState(false);
-  const [uniqueCode, setUniqueCode] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const bounceAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // Floating animation for the mascot
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: -12,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Pulsing animation for the Start button
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [bounceAnim, pulseAnim]);
 
   useEffect(() => {
     if (child && child.language) {
@@ -95,16 +131,17 @@ export default function IndexScreen() {
     }
   };
 
-  const validateCode = async () => {
-    if (!uniqueCode || uniqueCode.length !== 6) {
-      Alert.alert('Invalid Code', 'Please enter a valid 6-character code.');
+  const validateCode = async (code: string) => {
+    if (!code || code.length !== 6) {
+      setErrorMsg('Please enter a valid 6-character code.');
       return;
     }
 
     setLoading(true);
+    setErrorMsg(null);
     try {
       const response = await axios.post(`${API_URL}/api/sync/validate-code`, {
-        uniqueCode: uniqueCode.toUpperCase(),
+        uniqueCode: code.toUpperCase(),
       });
 
       if (response.data.valid) {
@@ -114,7 +151,7 @@ export default function IndexScreen() {
           nickname: response.data.nickname,
           avatar: 'default',
           language: response.data.language,
-          uniqueCode: uniqueCode.toUpperCase(),
+          uniqueCode: code.toUpperCase(),
           createdAt: new Date().toISOString(),
         };
 
@@ -122,22 +159,21 @@ export default function IndexScreen() {
         
         // Save to local database
         if (child) {
-          await databaseService.update('child', { unique_code: uniqueCode.toUpperCase() }, 'id = ?', [child.id]);
+          await databaseService.update('child', { unique_code: code.toUpperCase() }, 'id = ?', [child.id]);
         } else {
-          await databaseService.insert('child', { ...childData, unique_code: uniqueCode.toUpperCase() });
+          await databaseService.insert('child', { ...childData, unique_code: code.toUpperCase() });
         }
 
         setShowCodeModal(false);
-        setUniqueCode('');
-        router.push('/mood-check-in');
+        router.push('/choose-explorer');
       } else {
-        Alert.alert('Code invalide', 'Ce code n\'est pas reconnu. Vérifie auprès de tes parents.');
+        setErrorMsg('Code not recognized. Please check with your parents.');
       }
     } catch (error: any) {
       if (error.message?.includes('Network') || error.code === 'ERR_NETWORK') {
-        Alert.alert('Erreur réseau', 'Impossible de se connecter au serveur. Vérifie ta connexion WiFi.');
+        setErrorMsg('Cannot connect to server. Check your WiFi connection.');
       } else {
-        Alert.alert('Code invalide', 'Ce code n\'est pas reconnu. Vérifie auprès de tes parents.');
+        setErrorMsg('Code not recognized. Please check with your parents.');
       }
     } finally {
       setLoading(false);
@@ -146,7 +182,7 @@ export default function IndexScreen() {
 
   const handleStartJourney = () => {
     if (child) {
-      router.push('/mood-check-in');
+      router.push('/choose-explorer');
     } else {
       setShowCodeModal(true);
     }
@@ -174,13 +210,13 @@ export default function IndexScreen() {
 
             {/* Personnage */}
             <View style={styles.centerContainer}>
-              <View style={styles.characterWrapper}>
+              <Animated.View style={[styles.characterWrapper, { transform: [{ translateY: bounceAnim }] }]}>
                 <Image
                   source={require('../../assets/nawat_character.png')}
                   style={styles.characterImage}
                   resizeMode="contain"
                 />
-              </View>
+              </Animated.View>
             </View>
 
             {/* Badge central */}
@@ -199,19 +235,21 @@ export default function IndexScreen() {
             {/* Boutons d'action */}
             <View style={styles.actionsBlock}>
               {/* Start Journey */}
-              <TouchableOpacity
-                style={styles.startJourneyBtn}
-                onPress={handleStartJourney}
-                activeOpacity={0.9}
-              >
-                <View style={styles.sparkleContainer}>
-                  <SparkleIcon />
-                </View>
-                <Text style={styles.startJourneyText}>Start Journey</Text>
-                <View style={styles.arrowContainer}>
-                  <ArrowRightIcon />
-                </View>
-              </TouchableOpacity>
+              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                <TouchableOpacity
+                  style={styles.startJourneyBtn}
+                  onPress={handleStartJourney}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.sparkleContainer}>
+                    <SparkleIcon />
+                  </View>
+                  <Text style={styles.startJourneyText}>Start Journey</Text>
+                  <View style={styles.arrowContainer}>
+                    <ArrowRightIcon />
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
 
               {/* Sélecteur de langue */}
               <View style={styles.languagesRow}>
@@ -269,7 +307,7 @@ export default function IndexScreen() {
                     <Path d="M18 21a6 6 0 0 0-12 0" />
                   </Svg>
                 </View>
-                <Text style={styles.parentAccessText}>Parent / Teacher Access</Text>
+                <Text style={styles.parentAccessText}>Parents Access</Text>
                 <Text style={styles.parentChevron}>❯</Text>
               </TouchableOpacity>
 
@@ -280,7 +318,7 @@ export default function IndexScreen() {
                   activeOpacity={0.7}
                   onPress={() => {
                     setChild(null as any);
-                    setUniqueCode('');
+                    setErrorMsg(null);
                     setShowCodeModal(true);
                   }}
                 >
@@ -299,54 +337,16 @@ export default function IndexScreen() {
         </SafeAreaView>
       </ImageBackground>
 
-      {/* Code Input Modal */}
-      <Modal
+      <CodeInputModal
         visible={showCodeModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCodeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Enter Your Code</Text>
-            <Text style={styles.modalSubtitle}>
-              Please enter the 6-character code provided by your parent
-            </Text>
-            
-            <TextInput
-              style={styles.codeInput}
-              placeholder="ABC123"
-              value={uniqueCode}
-              onChangeText={setUniqueCode}
-              maxLength={6}
-              autoCapitalize="characters"
-              textAlign="center"
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowCodeModal(false);
-                  setUniqueCode('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={validateCode}
-                disabled={loading}
-              >
-                <Text style={styles.confirmButtonText}>
-                  {loading ? 'Validating...' : 'Confirm'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => {
+          setShowCodeModal(false);
+          setErrorMsg(null);
+        }}
+        onValidate={validateCode}
+        loading={loading}
+        errorMsg={errorMsg}
+      />
     </View>
   );
 }
@@ -526,78 +526,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#00796B',
     marginLeft: 6,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 24,
-    width: '85%',
-    maxWidth: 400,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#37474F',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#546E7A',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  codeInput: {
-    width: '100%',
-    height: 50,
-    borderWidth: 2,
-    borderColor: '#00B4D8',
-    borderRadius: 12,
-    fontSize: 20,
-    fontWeight: 'bold',
-    letterSpacing: 4,
-    color: '#37474F',
-    marginBottom: 20,
-    backgroundColor: '#F5F5F5',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#ECEFF1',
-  },
-  cancelButtonText: {
-    color: '#546E7A',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  confirmButton: {
-    backgroundColor: '#00B4D8',
-  },
-  confirmButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

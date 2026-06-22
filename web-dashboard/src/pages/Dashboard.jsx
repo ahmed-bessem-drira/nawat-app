@@ -69,132 +69,144 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Parent Dashboard</h1>
-        <p className="text-gray-600 mt-2">Welcome back, {user.name}!</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">Parent Dashboard</h1>
+          <p className="text-lg text-gray-600 mt-2 font-medium">Welcome back, <span className="text-primary-600">{user.name}</span>!</p>
+        </div>
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-primary-500/10 transition-all duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm">Total Children</p>
-              <p className="text-3xl font-bold text-gray-900">{childrenData.length}</p>
+              <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Total Children</p>
+              <p className="text-4xl font-black text-gray-900 mt-2">{childrenData.length}</p>
             </div>
-            <Baby className="w-12 h-12 text-primary-600" />
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <Baby className="w-7 h-7 text-primary-600" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-green-500/10 transition-all duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm">Total Sessions</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Total Sessions</p>
+              <p className="text-4xl font-black text-gray-900 mt-2">
                 {childrenData.reduce((acc, child) => acc + (child.sessionsCount || 0), 0)}
               </p>
             </div>
-            <Clock className="w-12 h-12 text-green-600" />
+            <div className="w-14 h-14 bg-gradient-to-br from-green-100 to-green-200 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <Clock className="w-7 h-7 text-green-600" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-purple-500/10 transition-all duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm">Avg Accuracy</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Avg Accuracy</p>
+              <p className="text-4xl font-black text-gray-900 mt-2">
                 {childrenData.length > 0 
                   ? Math.round(childrenData.reduce((acc, child) => acc + (child.avgAccuracy || 0), 0) / childrenData.length)
                   : 0}%
               </p>
             </div>
-            <TrendingUp className="w-12 h-12 text-purple-600" />
+            <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <TrendingUp className="w-7 h-7 text-purple-600" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-orange-500/10 transition-all duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm">Mood Entries</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Mood Entries</p>
+              <p className="text-4xl font-black text-gray-900 mt-2">
                 {childrenData.reduce((acc, child) => acc + (child.moodsCount || 0), 0)}
               </p>
             </div>
-            <Smile className="w-12 h-12 text-orange-600" />
+            <div className="w-14 h-14 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <Smile className="w-7 h-7 text-orange-600" />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Children List */}
-      <div className="bg-white rounded-xl shadow-md p-6">
-        <div className="flex justify-between items-center mb-6">
+      <div className="glass-card p-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <h2 className="text-2xl font-bold text-gray-900">Your Children</h2>
-          <div className="flex space-x-2">
+          <div className="flex space-x-3 w-full sm:w-auto">
             <button
               onClick={() => loadChildren()}
-              className="flex items-center space-x-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-50 hover:shadow-sm transition-all duration-300"
               title="Refresh data"
             >
               <RefreshCw className="w-5 h-5" />
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center space-x-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-gradient-to-r from-primary-600 to-indigo-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
             >
               <Plus className="w-5 h-5" />
-              <span>Add Child</span>
+              <span className="font-semibold">Add Child</span>
             </button>
           </div>
         </div>
 
         {childrenData.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <Baby className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg">No children added yet</p>
-            <p className="text-sm mt-2">Add your first child to get started</p>
+          <div className="text-center py-16 px-4 bg-gray-50/50 rounded-2xl border border-dashed border-gray-300">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Baby className="w-10 h-10 text-gray-400" />
+            </div>
+            <p className="text-xl font-semibold text-gray-900">No children added yet</p>
+            <p className="text-gray-500 mt-2 max-w-md mx-auto">Add your first child to get their unique access code and start tracking their progress.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {childrenData.map((child) => (
-              <div key={child.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                      <span className="text-primary-600 font-bold text-lg">
+              <div key={child.id} className="bg-white border border-gray-100 rounded-2xl p-6 hover:shadow-xl hover:border-primary-100 transition-all duration-300 group">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-primary-50 to-indigo-50 border border-primary-100 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
+                      <span className="text-primary-600 font-black text-xl">
                         {child.nickname?.charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{child.nickname}</h3>
-                      <p className="text-sm text-gray-600">{child.name}</p>
+                      <h3 className="font-bold text-lg text-gray-900 group-hover:text-primary-600 transition-colors">{child.nickname}</h3>
+                      <p className="text-sm text-gray-500">{child.name}</p>
                     </div>
                   </div>
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  <span className="text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">
                     {child.language}
                   </span>
                 </div>
 
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Sessions:</span>
-                    <span className="font-medium">{child.sessionsCount || 0}</span>
+                <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sessions</span>
+                    <span className="font-bold text-gray-900 text-lg">{child.sessionsCount || 0}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Avg Accuracy:</span>
-                    <span className="font-medium">{child.avgAccuracy || 0}%</span>
+                  <div>
+                    <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg Accuracy</span>
+                    <span className="font-bold text-gray-900 text-lg">{child.avgAccuracy || 0}%</span>
                   </div>
                 </div>
 
-                <div className="flex space-x-2">
+                <div className="flex space-x-3">
                   <button
                     onClick={() => navigate(`/child/${child.id}`)}
-                    className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                    className="flex-1 bg-white border border-gray-200 text-gray-700 py-2.5 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 text-sm font-semibold"
                   >
                     View Details
                   </button>
                   <button
                     onClick={() => handleGenerateCode(child)}
-                    className="flex-1 bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium flex items-center justify-center space-x-1"
+                    className="flex-1 bg-primary-50 text-primary-700 py-2.5 rounded-xl hover:bg-primary-100 transition-all duration-300 text-sm font-semibold flex items-center justify-center space-x-2"
                   >
                     <Key className="w-4 h-4" />
                     <span>Get Code</span>
@@ -208,46 +220,49 @@ const Dashboard = () => {
 
       {/* Add Child Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-gray-900">Add Child</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl transform transition-all">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-gray-900">Add Child</h3>
+                <p className="text-sm text-gray-500 mt-1">Create a new profile for your child</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="w-10 h-10 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-gray-200 hover:text-gray-700 transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddChild} className="space-y-4">
+            <form onSubmit={handleAddChild} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Child's Full Name</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Child's Full Name</label>
                 <input
                   type="text"
                   required
                   value={addFormData.name}
                   onChange={(e) => setAddFormData({ ...addFormData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter child's full name"
+                  className="w-full px-5 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-gray-900"
+                  placeholder="e.g. John Doe"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nickname</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Nickname</label>
                 <input
                   type="text"
                   required
                   value={addFormData.nickname}
                   onChange={(e) => setAddFormData({ ...addFormData, nickname: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter a nickname"
+                  className="w-full px-5 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-gray-900"
+                  placeholder="e.g. Johnny"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Language</label>
                 <select
                   value={addFormData.language}
                   onChange={(e) => setAddFormData({ ...addFormData, language: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-5 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-gray-900 cursor-pointer"
                 >
                   <option value="ENGLISH">English</option>
                   <option value="FRENCH">French</option>
@@ -255,18 +270,18 @@ const Dashboard = () => {
                 </select>
               </div>
 
-              <div className="flex space-x-3 pt-2">
+              <div className="flex space-x-3 pt-6">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-50 transition-colors font-bold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={addingChild}
-                  className="flex-1 bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-primary-600 to-indigo-600 text-white py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all font-bold disabled:opacity-50 disabled:transform-none"
                 >
                   {addingChild ? 'Adding...' : 'Add Child'}
                 </button>
@@ -278,38 +293,43 @@ const Dashboard = () => {
 
       {/* Code Modal */}
       {showCodeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl transform transition-all text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-green-100 to-green-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+              <Key className="w-8 h-8 text-green-600" />
+            </div>
+            
+            <h3 className="text-2xl font-black text-gray-900 mb-2">
               Access Code for {selectedChild?.nickname}
             </h3>
             
             {loadingCode ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Generating code...</p>
+              <div className="py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-100 border-t-primary-600 mx-auto"></div>
+                <p className="mt-4 text-gray-500 font-medium">Generating secure code...</p>
               </div>
             ) : generatedCode ? (
-              <div className="space-y-4">
-                <p className="text-gray-600">
-                  Share this code with your child to use in the mobile app:
+              <div className="space-y-6 mt-6">
+                <p className="text-gray-600 text-sm">
+                  Share this code with your child to use in the NAWAT mobile app:
                 </p>
-                <div className="bg-primary-50 border-2 border-primary-200 rounded-lg p-6 text-center">
-                  <p className="text-4xl font-bold text-primary-700 tracking-wider">
+                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-400 to-indigo-400"></div>
+                  <p className="text-5xl font-black text-gray-900 tracking-widest font-mono">
                     {generatedCode}
                   </p>
                 </div>
-                <p className="text-sm text-gray-500">
-                  This code is unique to {selectedChild?.nickname} and should be kept secure.
+                <p className="text-xs text-gray-500 font-medium">
+                  This code is unique and securely linked to {selectedChild?.nickname}'s profile.
                 </p>
               </div>
             ) : null}
 
             <button
               onClick={handleCloseModal}
-              className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              className="w-full mt-8 bg-gray-100 text-gray-800 py-3.5 rounded-xl hover:bg-gray-200 transition-colors font-bold"
             >
-              Close
+              Done
             </button>
           </div>
         </div>

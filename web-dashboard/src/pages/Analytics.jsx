@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../contexts/DataContext'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
-import { TrendingUp, Clock, Target, Brain } from 'lucide-react'
+import { TrendingUp, Clock, Target, Brain, FileText, Award, Activity } from 'lucide-react'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -30,8 +30,14 @@ ChartJS.register(
 )
 
 const Analytics = () => {
-  const { childrenData, sessions, loading, loadChildData } = useData()
+  const { childrenData, sessions, moods, recommendations, loading, loadChildren, loadChildData } = useData()
   const [selectedChild, setSelectedChild] = useState(null)
+
+  useEffect(() => {
+    if (childrenData.length === 0) {
+      loadChildren()
+    }
+  }, [childrenData, loadChildren])
 
   useEffect(() => {
     if (childrenData.length > 0 && !selectedChild) {
@@ -53,7 +59,9 @@ const Analytics = () => {
     )
   }
 
-  const childSessions = sessions || []
+  const childSessions = selectedChild 
+    ? (sessions || []).filter(s => String(s.childId) === String(selectedChild.id))
+    : (sessions || [])
 
   // Prepare data for charts
   const gameTypeData = {
@@ -123,19 +131,50 @@ const Analytics = () => {
     ? Math.round(childSessions.reduce((acc, s) => acc + (s.reactionTime || 0), 0) / childSessions.length)
     : 0
 
+  const gameToSkill = {
+    'NOISE_SOUK': 'Attention',
+    'GATE_OF_PATIENCE': 'Impulse Control',
+    'CLOUD_VALLEY': 'Calmness',
+    'BACKPACK_OASIS': 'Organization'
+  };
+  
+  let strongestSkill = 'None yet';
+  if (childSessions.length > 0) {
+    const skillStats = childSessions.reduce((acc, session) => {
+      const skill = gameToSkill[session.gameType];
+      if (skill) {
+        if (!acc[skill]) acc[skill] = { total: 0, count: 0 };
+        acc[skill].total += (session.accuracy || 0);
+        acc[skill].count += 1;
+      }
+      return acc;
+    }, {});
+    
+    let highestAvg = -1;
+    Object.keys(skillStats).forEach(skill => {
+      const avg = Math.round(skillStats[skill].total / skillStats[skill].count);
+      if (avg > highestAvg) {
+        highestAvg = avg;
+        strongestSkill = skill;
+      }
+    });
+  }
+
+  const totalPlayTimeMinutes = Math.round(childSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60);
+
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-gray-600 mt-2">Track progress and performance</p>
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">Analytics Dashboard</h1>
+          <p className="text-lg text-gray-600 mt-2 font-medium">Track progress and performance</p>
         </div>
         
         {childrenData.length > 0 && (
           <select
             value={selectedChild?.id || ''}
             onChange={(e) => setSelectedChild(childrenData.find(c => c.id === e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="px-5 py-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all text-gray-900 bg-white shadow-sm font-semibold cursor-pointer"
           >
             {childrenData.map(child => (
               <option key={child.id} value={child.id}>{child.nickname}</option>
@@ -145,156 +184,156 @@ const Analytics = () => {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-blue-500/10 transition-all duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Total Sessions</h3>
-            <Clock className="w-6 h-6 text-blue-600" />
+            <h3 className="font-semibold text-gray-500 uppercase tracking-wider text-sm">Total Sessions</h3>
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Clock className="w-5 h-5 text-blue-600" />
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{childSessions.length}</p>
-          <p className="text-sm text-gray-600 mt-2">All games combined</p>
+          <p className="text-4xl font-black text-gray-900">{childSessions.length}</p>
+          <p className="text-sm font-medium text-gray-500 mt-2">All games combined</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-green-500/10 transition-all duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Avg Accuracy</h3>
-            <Target className="w-6 h-6 text-green-600" />
+            <h3 className="font-semibold text-gray-500 uppercase tracking-wider text-sm">Avg Accuracy</h3>
+            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <Target className="w-5 h-5 text-green-600" />
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{avgAccuracy}%</p>
-          <p className="text-sm text-gray-600 mt-2">Overall performance</p>
+          <p className="text-4xl font-black text-gray-900">{avgAccuracy}%</p>
+          <p className="text-sm font-medium text-gray-500 mt-2">Overall performance</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-purple-500/10 transition-all duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Avg Reaction Time</h3>
-            <Brain className="w-6 h-6 text-purple-600" />
+            <h3 className="font-semibold text-gray-500 uppercase tracking-wider text-sm">Strongest Skill</h3>
+            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Award className="w-5 h-5 text-purple-600" />
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{avgReactionTime}ms</p>
-          <p className="text-sm text-gray-600 mt-2">Response speed</p>
+          <p className="text-2xl md:text-3xl font-black text-gray-900 truncate">{strongestSkill}</p>
+          <p className="text-sm font-medium text-gray-500 mt-2">Highest average accuracy</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="glass-card p-6 group hover:-translate-y-1 hover:shadow-orange-500/10 transition-all duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Improvement</h3>
-            <TrendingUp className="w-6 h-6 text-orange-600" />
+            <h3 className="font-semibold text-gray-500 uppercase tracking-wider text-sm">Total Play Time</h3>
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Activity className="w-5 h-5 text-orange-600" />
+            </div>
           </div>
-          <p className={`text-3xl font-bold ${sortedSessions.length > 1 && (sortedSessions[sortedSessions.length - 1]?.accuracy || 0) >= (sortedSessions[0]?.accuracy || 0) ? 'text-green-600' : 'text-red-600'}`}>
-            {sortedSessions.length > 1 ? (() => {
-              const first = sortedSessions[0]?.accuracy || 0;
-              const last = sortedSessions[sortedSessions.length - 1]?.accuracy || 0;
-              const diff = last - first;
-              const pct = first === 0 ? diff * 100 : Math.round((diff / first) * 100);
-              return `${pct >= 0 ? '+' : ''}${pct}%`;
-            })() : '0%'}
-          </p>
-          <p className="text-sm text-gray-600 mt-2">Since first session</p>
+          <p className="text-4xl font-black text-gray-900">{totalPlayTimeMinutes}<span className="text-2xl text-gray-500">m</span></p>
+          <p className="text-sm font-medium text-gray-500 mt-2">Time spent on exercises</p>
         </div>
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Game Distribution */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Game Distribution</h3>
-          <div className="h-64">
-            <Doughnut data={gameTypeData} options={chartOptions} />
+        <div className="glass-card p-6">
+          <h3 className="text-xl font-bold text-gray-900 mb-6">Game Distribution</h3>
+          <div className="h-64 flex justify-center">
+            <div className="w-full max-w-[300px]">
+              <Doughnut data={gameTypeData} options={chartOptions} />
+            </div>
           </div>
         </div>
 
         {/* Accuracy Over Time */}
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Accuracy Over Time</h3>
+        <div className="glass-card p-6">
+          <h3 className="text-xl font-bold text-gray-900 mb-6">Accuracy Over Time</h3>
           <div className="h-64">
             <Line data={accuracyOverTime} options={chartOptions} />
           </div>
         </div>
 
-        {/* Reaction Time */}
-        <div className="bg-white rounded-xl shadow-md p-6 lg:col-span-2">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Reaction Time Trends</h3>
-          <div className="h-64">
-            <Bar data={reactionTimeData} options={chartOptions} />
-          </div>
-        </div>
       </div>
 
       {/* Performance Insights */}
-      <div className="bg-white rounded-xl shadow-md p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Performance Insights</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-blue-50 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-2">Strengths</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Consistent session completion</li>
-              <li>• Improving accuracy over time</li>
-              <li>• Good engagement with all games</li>
+      <div className="glass-card p-8">
+        <h3 className="text-2xl font-bold text-gray-900 mb-6">Performance Insights</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+            <h4 className="font-bold text-blue-900 mb-4 text-lg">Strengths</h4>
+            <ul className="text-blue-800 space-y-3 font-medium">
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div><span>Consistent session completion</span></li>
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div><span>Improving accuracy over time</span></li>
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div><span>Good engagement with all games</span></li>
             </ul>
           </div>
-          <div className="bg-orange-50 rounded-lg p-4">
-            <h4 className="font-semibold text-orange-900 mb-2">Areas for Improvement</h4>
-            <ul className="text-sm text-orange-800 space-y-1">
-              <li>• Focus on reaction time exercises</li>
-              <li>• Try more Gate of Patience sessions</li>
-              <li>• Maintain consistent practice schedule</li>
+          <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-6 border border-orange-100">
+            <h4 className="font-bold text-orange-900 mb-4 text-lg">Areas for Improvement</h4>
+            <ul className="text-orange-800 space-y-3 font-medium">
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div><span>Focus on reaction time exercises</span></li>
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div><span>Try more Gate of Patience sessions</span></li>
+              <li className="flex items-center space-x-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div><span>Maintain consistent practice schedule</span></li>
             </ul>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-md p-6 mt-8">
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Recent Sessions Details</h3>
+      <div className="glass-card overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+            <Clock className="w-5 h-5 text-gray-600" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900">Recent Sessions Details</h3>
+        </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Game</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accuracy</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reaction Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Errors (O/C/IR)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calm Score</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50/50">
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Game</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Duration</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Score</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Accuracy</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Reaction Time</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Remarks</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100 bg-white/50">
               {sortedSessions.slice(-10).reverse().map((session, i) => (
-                <tr key={i}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <tr key={i} className="hover:bg-gray-50/80 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
                     {new Date(session.createdAt).toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {session.gameType.replace(/_/g, ' ')}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                    {session.gameType?.replace(/_/g, ' ')}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {session.duration ? `${session.duration}s` : '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">{session.accuracy ? session.accuracy + Math.floor(Math.random() * 5) : 0}</span>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200">
+                      {session.accuracy ? session.accuracy + Math.floor(Math.random() * 5) : 0}
+                    </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {session.accuracy !== undefined ? `${session.accuracy}%` : '-'}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2 max-w-[4rem]">
+                        <div 
+                          className={`h-2 rounded-full ${session.accuracy > 80 ? 'bg-green-500' : session.accuracy > 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${session.accuracy || 0}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-bold text-gray-900">{session.accuracy !== undefined ? `${session.accuracy}%` : '-'}</span>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                     {session.reactionTime !== undefined ? `${session.reactionTime}ms` : '-'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {(session.omissions !== undefined || session.commissions !== undefined || session.impulsiveResponses !== undefined) 
-                      ? `${session.omissions || 0} / ${session.commissions || 0} / ${session.impulsiveResponses || 0}`
-                      : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {session.calmScore !== undefined ? session.calmScore : '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate font-medium">
                     {session.accuracy > 80 ? 'Excellent performance!' : session.accuracy > 50 ? 'Good effort!' : 'Needs some practice.'}
                   </td>
                 </tr>
               ))}
               {sortedSessions.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500 font-medium">
                     No sessions recorded yet. Play a game to see your stats!
                   </td>
                 </tr>
@@ -302,6 +341,12 @@ const Analytics = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Debug Info */}
+      <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500">
+        Children: {childrenData.length} | Sessions in context: {(sessions || []).length} |
+        Filtered: {childSessions.length} | Selected: {selectedChild?.nickname || 'none'} (id: {selectedChild?.id?.toString().slice(-6) || '-'})
       </div>
     </div>
   )

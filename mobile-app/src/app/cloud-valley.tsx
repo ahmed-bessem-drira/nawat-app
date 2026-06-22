@@ -13,7 +13,7 @@ import {
   PixelRatio,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useGameStore } from '@/stores/gameStore';
 import { useChildStore } from '@/stores/childStore';
@@ -104,6 +104,13 @@ const LEVELS: Record<number, LevelConfig> = {
   },
 };
 
+const EXPLORERS = [
+  { id: 'avatar_1', name: 'Nawat', image: require('../../assets/nawat_character.png') },
+  { id: 'avatar_2', name: 'Zahra', image: require('../../assets/zahra_placeholder.png') },
+  { id: 'avatar_3', name: 'Sami', image: require('../../assets/sami_placeholder.png') },
+  { id: 'avatar_4', name: 'Lulu', image: require('../../assets/lulu_placeholder.png') },
+];
+
 // Map Database string to Language enum properly
 const getLanguageEnum = (dbLang: string | null | undefined): Language => {
   if (!dbLang) return Language.ENGLISH;
@@ -115,8 +122,12 @@ const getLanguageEnum = (dbLang: string | null | undefined): Language => {
 
 export default function CloudValleyScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ selectedLanguage?: string; selectedAvatar?: string }>();
   const { startSession, endSession, clearSession, rewards } = useGameStore();
   const { child } = useChildStore();
+
+  const selectedAvatarId = params.selectedAvatar || child?.avatar || 'avatar_1';
+  const selectedExplorer = EXPLORERS.find((e) => e.id === selectedAvatarId) || EXPLORERS[0];
 
   // Resolve correct Language enum
   const lang = getLanguageEnum(child?.language);
@@ -772,7 +783,7 @@ export default function CloudValleyScreen() {
 
       <Animated.View style={[styles.permissionMascotWrapper, { transform: [{ scale: pulseAnim }] }]}>
         <Image
-          source={require('../../assets/nawat_character.png')}
+          source={selectedExplorer.image}
           style={styles.permissionMascot}
           resizeMode="contain"
         />
@@ -888,7 +899,7 @@ export default function CloudValleyScreen() {
 
       <View style={styles.readyFooterRow}>
         <Image
-          source={require('../../assets/nawat_character.png')}
+          source={selectedExplorer.image}
           style={styles.mascotReady}
           resizeMode="contain"
         />
@@ -940,7 +951,7 @@ export default function CloudValleyScreen() {
           </View>
           <Text style={styles.instructionCardText}>{t(currentStep.instructionKey)}</Text>
           <Image
-            source={require('../../assets/nawat_character.png')}
+            source={selectedExplorer.image}
             style={styles.peekingMascotImage}
             resizeMode="contain"
           />
@@ -1127,7 +1138,7 @@ export default function CloudValleyScreen() {
 
       <View style={styles.resultsLayoutRow}>
         <Image
-          source={require('../../assets/nawat_character.png')}
+          source={selectedExplorer.image}
           style={styles.celebrationMascot}
           resizeMode="contain"
         />

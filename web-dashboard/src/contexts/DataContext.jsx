@@ -34,7 +34,7 @@ export const DataProvider = ({ children }) => {
       setMoods(moodsData)
       setRecommendations(recommendationsData)
     } catch (error) {
-      console.error('Failed to load child data:', error)
+      console.error('Failed to load child data:', error.response?.data || error.message)
     } finally {
       setLoading(false)
     }

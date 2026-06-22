@@ -10,9 +10,10 @@ export const chatbotService = {
       throw new Error('Grok API key not configured')
     }
 
-    const systemPrompt = `You are a helpful assistant for parents monitoring their child's progress in educational games. 
+    const systemPrompt = `You are an AI assistant specialized ONLY in ADHD (TDAH), child development, and the NAWAT FOCUS platform.
     The child's context: ${JSON.stringify(childContext)}. 
-    Provide insights, recommendations, and answer questions about the child's development, game performance, and emotional state.`
+    Provide insights, recommendations, and answer questions about the child's development, game performance, and emotional state.
+    CRITICAL RULE: If the user asks a question that is NOT related to ADHD, cognitive/emotional development, or the NAWAT platform, you MUST politely refuse to answer and remind them that you are strictly an ADHD assistant.`
 
     try {
       const response = await axios.post(

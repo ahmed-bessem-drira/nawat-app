@@ -3,6 +3,10 @@ import { ParentService } from '../services/parent.service';
 import { JwtService } from '@nestjs/jwt';
 import { SyncService } from '../services/sync.service';
 import { ParentJwtAuthGuard } from '../guards/parent-jwt-auth.guard';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { GameData, GameDataDocument } from '../schemas/game-data.schema';
+import { Child, ChildDocument } from '../schemas/child.schema';
 
 @Controller('api/parents')
 export class ParentController {
@@ -10,6 +14,8 @@ export class ParentController {
     private readonly parentService: ParentService,
     private readonly syncService: SyncService,
     private readonly jwtService: JwtService,
+    @InjectModel(GameData.name) private gameDataModel: Model<GameDataDocument>,
+    @InjectModel(Child.name) private childModel: Model<ChildDocument>,
   ) { }
 
   @Post('register')
@@ -118,9 +124,20 @@ export class ParentController {
 
   @Get('debug/all-game-data')
   async debugAllGameData() {
-    const mongoose = require('mongoose');
-    const db = mongoose.connection.db;
-    const gameData = await db.collection('gamedatas').find({}).limit(5).toArray();
-    return { count: gameData.length, data: gameData };
+    const gameData = await this.gameDataModel.find({}).limit(5).lean();
+    const children = await this.childModel.find({}).limit(5).select('name nickname uniqueCode _id').lean();
+    return { gameDataCount: gameData.length, gameData, children, childrenCount: children.length };
+  }
+
+  @Get('debug/cleanup')
+  async debugCleanup() {
+    const children = await this.childModel.find({}).select('_id').lean();
+    const childIds = children.map(c => c._id);
+    const orphaned = await this.gameDataModel.countDocuments({ childId: { $nin: childIds } });
+    if (orphaned > 0) {
+      await this.gameDataModel.deleteMany({ childId: { $nin: childIds } });
+    }
+    const remaining = await this.gameDataModel.countDocuments();
+    return { deleted: orphaned, remaining };
   }
 }
