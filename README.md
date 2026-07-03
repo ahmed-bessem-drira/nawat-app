@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="https://via.placeholder.com/150" alt="NAWAT FOCUS Logo" width="150" height="150" />
   <h1>🌟 NAWAT FOCUS</h1>
   <p><strong>An offline-first AI-powered serious game platform for children with ADHD in low-resource environments.</strong></p>
 
