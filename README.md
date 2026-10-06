@@ -306,5 +306,5 @@ This project is developed for educational purposes.
 > **Disclaimer:** Please ensure compliance with local regulations (such as COPPA, GDPR-K, HIPAA) if you plan to deploy this platform in a real-world clinical or educational setting.
 
 <div align="center">
-  <i>Built with ❤️ for inclusive education.</i>
+  <i>Built with ❤️ by Ahmed Bessem Drira & Yessine Akrout  .</i>
 </div>
